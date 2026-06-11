@@ -1,0 +1,3 @@
+main(): Void {
+    var x: Int = true
+}

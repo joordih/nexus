@@ -1,0 +1,52 @@
+Program
+  ImportDecl(std.io)
+  DataDecl(Punto)
+    Field(x: Int)
+    Field(y: Int)
+  ClassDecl(PuntoService)
+    fn distanciaOrigenCuadrado(p: Punto): Int
+      Block
+        Return
+          Binary(Add)
+            Binary(Mul)
+              FieldAccess(x)
+                Path(p)
+              FieldAccess(x)
+                Path(p)
+            Binary(Mul)
+              FieldAccess(y)
+                Path(p)
+              FieldAccess(y)
+                Path(p)
+  fn areaAproximada(radio: Int): Int
+    Block
+      Return
+        Binary(Mul)
+          Binary(Mul)
+            Int(3)
+            Path(radio)
+          Path(radio)
+  fn main(): Void
+    Block
+      Var(var p)
+        Call
+          Path(Punto)
+          NamedArg(x)
+            Int(3)
+          NamedArg(y)
+            Int(4)
+      Var(var svc)
+        Call
+          Path(PuntoService)
+      ExprStmt
+        MethodCall(println)
+          Path(io)
+          MethodCall(distanciaOrigenCuadrado)
+            Path(svc)
+            Path(p)
+      ExprStmt
+        MethodCall(println)
+          Path(io)
+          Call
+            Path(areaAproximada)
+            Int(5)
