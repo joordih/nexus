@@ -1,0 +1,19 @@
+#include "nexus_runtime.h"
+
+NxInt nx_fn_suma(NxInt a, NxInt b);
+void nx_fn_main();
+
+NxInt nx_fn_suma(NxInt a, NxInt b) {
+    return (a + b);
+}
+
+void nx_fn_main() {
+    NxInt resultado = nx_fn_suma(((NxInt)3LL), ((NxInt)4LL));
+}
+
+int main(void) {
+    nexus_init();
+    nx_fn_main();
+    return 0;
+}
+

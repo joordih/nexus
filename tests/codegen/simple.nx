@@ -1,0 +1,7 @@
+suma(a: Int, b: Int): Int {
+    return a + b
+}
+
+main(): Void {
+    var resultado = suma(3, 4)
+}

@@ -1,0 +1,8 @@
+build/
+bootstrap/target/
+*.out
+tests/**/*.c
+tests/**/*.c.expected
+
+# Working documents — kept locally but not published
+JAVA_SYNTAX.md

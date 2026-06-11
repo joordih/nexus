@@ -1,0 +1,14 @@
+Ident(main)
+(
+)
+:
+Ident(Void)
+{
+var
+Ident(x)
+:
+Ident(Int)
+=
+Int(42)
+}
+EOF
