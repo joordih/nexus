@@ -69,6 +69,7 @@ pub struct SemaContext {
     pub functions: HashMap<String, FnInfo>,
     pub methods: HashMap<String, HashMap<String, FnInfo>>,
     pub imports: std::collections::HashSet<String>,
+    pub globals: HashMap<String, NxType>,
     pub errors: Vec<SemaError>,
 }
 
@@ -79,6 +80,7 @@ impl SemaContext {
             functions: HashMap::new(),
             methods: HashMap::new(),
             imports: std::collections::HashSet::new(),
+            globals: HashMap::new(),
             errors: Vec::new(),
         }
     }
@@ -172,6 +174,12 @@ impl SemaContext {
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(NxType::Void);
                 self.functions.insert(f.name.clone(), FnInfo { params, return_type: ret });
+            }
+            Item::GlobalConst(g) => {
+                let ty = g.ty.as_ref()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(NxType::Unknown);
+                self.globals.insert(g.name.clone(), ty);
             }
             _ => {}
         }
@@ -345,7 +353,15 @@ impl SemaContext {
             Expr::Path(path) => {
                 if path.len() == 1 {
                     scope.lookup(&path[0]).unwrap_or_else(|| {
-                        if self.functions.contains_key(&path[0]) || self.structs.contains_key(&path[0]) || self.imports.contains(&path[0]) {
+                        if let Some(ty) = self.globals.get(&path[0]).cloned() {
+                            return ty;
+                        }
+                        const BUILTINS: &[&str] = &["Map", "List", "Int", "Long", "Float",
+                            "Double", "Bool", "Char", "String", "Void"];
+                        if self.functions.contains_key(&path[0])
+                            || self.structs.contains_key(&path[0])
+                            || self.imports.contains(&path[0])
+                            || BUILTINS.contains(&path[0].as_str()) {
                             NxType::Unknown
                         } else {
                             self.error(format!("nombre no resuelto: {}", path[0]));
@@ -386,9 +402,9 @@ impl SemaContext {
                     }
                     BinaryOp::Eq | BinaryOp::Ne => NxType::Bool,
                     BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
-                        if (lt != NxType::Int && lt != NxType::Double && lt != NxType::Unknown)
-                            || (rt != NxType::Int && rt != NxType::Double && rt != NxType::Unknown)
-                        {
+                        let is_numeric = |t: &NxType| matches!(t,
+                            NxType::Int | NxType::Long | NxType::Double | NxType::Float | NxType::Char | NxType::Unknown);
+                        if !is_numeric(&lt) || !is_numeric(&rt) {
                             self.error(format!("comparación requiere numérico, obtenido {} y {}", lt, rt));
                         }
                         NxType::Bool

@@ -146,6 +146,7 @@ impl Parser {
             TokenKind::Value => Ok(Item::ValueDecl(self.parse_value_decl(annotations)?)),
             TokenKind::Interface => Ok(Item::InterfaceDecl(self.parse_interface_decl(annotations)?)),
             TokenKind::Annotation => Ok(Item::AnnotationDecl(self.parse_annotation_decl()?)),
+            TokenKind::Final | TokenKind::Var => Ok(Item::GlobalConst(self.parse_global_const()?)),
             TokenKind::Ident(_) => Ok(Item::Function(self.parse_function(annotations)?)),
             _ => {
                 let tok = self.current().clone();
@@ -156,6 +157,22 @@ impl Parser {
                 })
             }
         }
+    }
+
+    fn parse_global_const(&mut self) -> Result<GlobalConst, ParseError> {
+        let is_final = *self.peek_kind() == TokenKind::Final;
+        self.advance();
+        let name = self.expect_ident()?;
+        let ty = if *self.peek_kind() == TokenKind::Colon {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        self.expect(&TokenKind::Eq)?;
+        let value = self.parse_expr(false)?;
+        self.skip_semis();
+        Ok(GlobalConst { is_final, name, ty, value })
     }
 
     fn parse_dot_path(&mut self) -> Result<Vec<String>, ParseError> {

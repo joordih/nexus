@@ -1,0 +1,439 @@
+import std.io
+
+final TK_EOF: Int = 0
+final TK_IDENT: Int = 1
+final TK_INT: Int = 2
+final TK_FLOAT: Int = 3
+final TK_STRING: Int = 4
+final TK_CHAR: Int = 5
+final TK_VAR: Int = 10
+final TK_FINAL: Int = 11
+final TK_CLASS: Int = 12
+final TK_DATA: Int = 13
+final TK_VALUE: Int = 14
+final TK_INTERFACE: Int = 15
+final TK_ANNOTATION: Int = 16
+final TK_EXTENDS: Int = 17
+final TK_IMPLEMENTS: Int = 18
+final TK_IMPORT: Int = 19
+final TK_MODULE: Int = 20
+final TK_IF: Int = 21
+final TK_ELSE: Int = 22
+final TK_WHILE: Int = 23
+final TK_FOR: Int = 24
+final TK_IN: Int = 25
+final TK_SWITCH: Int = 26
+final TK_CASE: Int = 27
+final TK_DEFAULT: Int = 28
+final TK_RETURN: Int = 29
+final TK_BREAK: Int = 30
+final TK_CONTINUE: Int = 31
+final TK_TRUE: Int = 32
+final TK_FALSE: Int = 33
+final TK_NULL: Int = 34
+final TK_THIS: Int = 35
+final TK_PLUS: Int = 40
+final TK_MINUS: Int = 41
+final TK_STAR: Int = 42
+final TK_SLASH: Int = 43
+final TK_PERCENT: Int = 44
+final TK_EQEQ: Int = 45
+final TK_BANGEQ: Int = 46
+final TK_LT: Int = 47
+final TK_LTEQ: Int = 48
+final TK_GT: Int = 49
+final TK_GTEQ: Int = 50
+final TK_ANDAND: Int = 51
+final TK_OROR: Int = 52
+final TK_BANG: Int = 53
+final TK_EQ: Int = 54
+final TK_FAT_ARROW: Int = 55
+final TK_ARROW: Int = 56
+final TK_DOT: Int = 57
+final TK_COMMA: Int = 58
+final TK_COLON: Int = 59
+final TK_SEMI: Int = 60
+final TK_LPAREN: Int = 61
+final TK_RPAREN: Int = 62
+final TK_LBRACE: Int = 63
+final TK_RBRACE: Int = 64
+final TK_LBRACKET: Int = 65
+final TK_RBRACKET: Int = 66
+final TK_AT: Int = 67
+final TK_QUESTION: Int = 68
+final TK_QUESTION_DOT: Int = 69
+final TK_QUESTION_COLON: Int = 70
+final TK_ERROR: Int = 99
+
+data Token {
+    kind: Int
+    text: String
+    line: Int
+    col: Int
+}
+
+makeToken(kind: Int, text: String, line: Int, col: Int): Token {
+    return Token(kind: kind, text: text, line: line, col: col)
+}
+
+isAlpha(c: Char): Bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+}
+
+isDigit(c: Char): Bool {
+    return c >= '0' && c <= '9'
+}
+
+isAlphaNum(c: Char): Bool {
+    return isAlpha(c) || isDigit(c)
+}
+
+isSpace(c: Char): Bool {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n'
+}
+
+buildKeywords(): Map {
+    var m: Map = Map()
+    m.insert("var", TK_VAR)
+    m.insert("final", TK_FINAL)
+    m.insert("class", TK_CLASS)
+    m.insert("data", TK_DATA)
+    m.insert("value", TK_VALUE)
+    m.insert("interface", TK_INTERFACE)
+    m.insert("annotation", TK_ANNOTATION)
+    m.insert("extends", TK_EXTENDS)
+    m.insert("implements", TK_IMPLEMENTS)
+    m.insert("import", TK_IMPORT)
+    m.insert("module", TK_MODULE)
+    m.insert("if", TK_IF)
+    m.insert("else", TK_ELSE)
+    m.insert("while", TK_WHILE)
+    m.insert("for", TK_FOR)
+    m.insert("in", TK_IN)
+    m.insert("switch", TK_SWITCH)
+    m.insert("case", TK_CASE)
+    m.insert("default", TK_DEFAULT)
+    m.insert("return", TK_RETURN)
+    m.insert("break", TK_BREAK)
+    m.insert("continue", TK_CONTINUE)
+    m.insert("true", TK_TRUE)
+    m.insert("false", TK_FALSE)
+    m.insert("null", TK_NULL)
+    m.insert("this", TK_THIS)
+    return m
+}
+
+class Lexer(source: String, pos: Int, line: Int, col: Int, keywords: Map) {
+
+    peek(): Char {
+        if (this.pos >= this.source.length()) {
+            return '\0'
+        }
+        return this.source.charAt(this.pos)
+    }
+
+    peek2(): Char {
+        var next = this.pos + 1
+        if (next >= this.source.length()) {
+            return '\0'
+        }
+        return this.source.charAt(next)
+    }
+
+    advance(): Char {
+        if (this.pos >= this.source.length()) {
+            return '\0'
+        }
+        var c = this.source.charAt(this.pos)
+        this.pos = this.pos + 1
+        if (c == '\n') {
+            this.line = this.line + 1
+            this.col = 1
+        } else {
+            this.col = this.col + 1
+        }
+        return c
+    }
+
+    skipWhitespace(): Void {
+        while (isSpace(this.peek())) {
+            this.advance()
+        }
+    }
+
+    skipLineComment(): Void {
+        while (this.peek() != '\n' && this.peek() != '\0') {
+            this.advance()
+        }
+    }
+
+    skipBlockComment(): Void {
+        while (this.peek() != '\0') {
+            var c = this.advance()
+            if (c == '*' && this.peek() == '/') {
+                this.advance()
+                return
+            }
+        }
+    }
+
+    skipTrivia(): Void {
+        var running = true
+        while (running) {
+            this.skipWhitespace()
+            if (this.peek() == '/' && this.peek2() == '/') {
+                this.advance()
+                this.advance()
+                this.skipLineComment()
+            } else if (this.peek() == '/' && this.peek2() == '*') {
+                this.advance()
+                this.advance()
+                this.skipBlockComment()
+            } else {
+                running = false
+            }
+        }
+    }
+
+    scanIdent(startLine: Int, startCol: Int): Token {
+        var buf = ""
+        while (isAlphaNum(this.peek())) {
+            var c = this.advance()
+            buf = buf + c.toString()
+        }
+        if (this.keywords.contains(buf)) {
+            var kind: Int = this.keywords.getInt(buf)
+            return makeToken(kind, buf, startLine, startCol)
+        }
+        return makeToken(TK_IDENT, buf, startLine, startCol)
+    }
+
+    scanNumber(startLine: Int, startCol: Int): Token {
+        var buf = ""
+        while (isDigit(this.peek())) {
+            var c = this.advance()
+            buf = buf + c.toString()
+        }
+        if (this.peek() == '.' && isDigit(this.peek2())) {
+            var dot = this.advance()
+            buf = buf + dot.toString()
+            while (isDigit(this.peek())) {
+                var c = this.advance()
+                buf = buf + c.toString()
+            }
+            return makeToken(TK_FLOAT, buf, startLine, startCol)
+        }
+        return makeToken(TK_INT, buf, startLine, startCol)
+    }
+
+    scanString(startLine: Int, startCol: Int): Token {
+        this.advance()
+        var buf = ""
+        while (this.peek() != '"' && this.peek() != '\0') {
+            var c = this.advance()
+            if (c == '\\') {
+                var esc = this.advance()
+                if (esc == 'n') {
+                    buf = buf + "\n"
+                } else if (esc == 't') {
+                    buf = buf + "\t"
+                } else if (esc == 'r') {
+                    buf = buf + "\r"
+                } else {
+                    buf = buf + esc.toString()
+                }
+            } else {
+                buf = buf + c.toString()
+            }
+        }
+        if (this.peek() == '"') {
+            this.advance()
+        }
+        return makeToken(TK_STRING, buf, startLine, startCol)
+    }
+
+    scanChar(startLine: Int, startCol: Int): Token {
+        this.advance()
+        var c = this.advance()
+        var val = ""
+        if (c == '\\') {
+            var esc = this.advance()
+            if (esc == 'n') {
+                val = "\n"
+            } else if (esc == 't') {
+                val = "\t"
+            } else if (esc == '0') {
+                val = "\0"
+            } else {
+                val = esc.toString()
+            }
+        } else {
+            val = c.toString()
+        }
+        if (this.peek() == '\'') {
+            this.advance()
+        }
+        return makeToken(TK_CHAR, val, startLine, startCol)
+    }
+
+    nextToken(): Token {
+        this.skipTrivia()
+        var startLine = this.line
+        var startCol = this.col
+        var c = this.peek()
+
+        if (c == '\0') {
+            return makeToken(TK_EOF, "", startLine, startCol)
+        }
+
+        if (isAlpha(c)) {
+            return this.scanIdent(startLine, startCol)
+        }
+
+        if (isDigit(c)) {
+            return this.scanNumber(startLine, startCol)
+        }
+
+        if (c == '"') {
+            return this.scanString(startLine, startCol)
+        }
+
+        if (c == '\'') {
+            return this.scanChar(startLine, startCol)
+        }
+
+        this.advance()
+
+        if (c == '+') {
+            return makeToken(TK_PLUS, "+", startLine, startCol)
+        }
+        if (c == '*') {
+            return makeToken(TK_STAR, "*", startLine, startCol)
+        }
+        if (c == '/') {
+            return makeToken(TK_SLASH, "/", startLine, startCol)
+        }
+        if (c == '%') {
+            return makeToken(TK_PERCENT, "%", startLine, startCol)
+        }
+        if (c == '(') {
+            return makeToken(TK_LPAREN, "(", startLine, startCol)
+        }
+        if (c == ')') {
+            return makeToken(TK_RPAREN, ")", startLine, startCol)
+        }
+        if (c == '{') {
+            return makeToken(TK_LBRACE, "{", startLine, startCol)
+        }
+        if (c == '}') {
+            return makeToken(TK_RBRACE, "}", startLine, startCol)
+        }
+        if (c == '[') {
+            return makeToken(TK_LBRACKET, "[", startLine, startCol)
+        }
+        if (c == ']') {
+            return makeToken(TK_RBRACKET, "]", startLine, startCol)
+        }
+        if (c == ',') {
+            return makeToken(TK_COMMA, ",", startLine, startCol)
+        }
+        if (c == ';') {
+            return makeToken(TK_SEMI, ";", startLine, startCol)
+        }
+        if (c == '@') {
+            return makeToken(TK_AT, "@", startLine, startCol)
+        }
+        if (c == '.') {
+            return makeToken(TK_DOT, ".", startLine, startCol)
+        }
+        if (c == '-') {
+            if (this.peek() == '>') {
+                this.advance()
+                return makeToken(TK_ARROW, "->", startLine, startCol)
+            }
+            return makeToken(TK_MINUS, "-", startLine, startCol)
+        }
+        if (c == '=') {
+            if (this.peek() == '=') {
+                this.advance()
+                return makeToken(TK_EQEQ, "==", startLine, startCol)
+            }
+            if (this.peek() == '>') {
+                this.advance()
+                return makeToken(TK_FAT_ARROW, "=>", startLine, startCol)
+            }
+            return makeToken(TK_EQ, "=", startLine, startCol)
+        }
+        if (c == '!') {
+            if (this.peek() == '=') {
+                this.advance()
+                return makeToken(TK_BANGEQ, "!=", startLine, startCol)
+            }
+            return makeToken(TK_BANG, "!", startLine, startCol)
+        }
+        if (c == '<') {
+            if (this.peek() == '=') {
+                this.advance()
+                return makeToken(TK_LTEQ, "<=", startLine, startCol)
+            }
+            return makeToken(TK_LT, "<", startLine, startCol)
+        }
+        if (c == '>') {
+            if (this.peek() == '=') {
+                this.advance()
+                return makeToken(TK_GTEQ, ">=", startLine, startCol)
+            }
+            return makeToken(TK_GT, ">", startLine, startCol)
+        }
+        if (c == '&') {
+            if (this.peek() == '&') {
+                this.advance()
+                return makeToken(TK_ANDAND, "&&", startLine, startCol)
+            }
+            return makeToken(TK_ERROR, "&", startLine, startCol)
+        }
+        if (c == '|') {
+            if (this.peek() == '|') {
+                this.advance()
+                return makeToken(TK_OROR, "||", startLine, startCol)
+            }
+            return makeToken(TK_ERROR, "|", startLine, startCol)
+        }
+        if (c == ':') {
+            return makeToken(TK_COLON, ":", startLine, startCol)
+        }
+        if (c == '?') {
+            if (this.peek() == '.') {
+                this.advance()
+                return makeToken(TK_QUESTION_DOT, "?.", startLine, startCol)
+            }
+            if (this.peek() == ':') {
+                this.advance()
+                return makeToken(TK_QUESTION_COLON, "?:", startLine, startCol)
+            }
+            return makeToken(TK_QUESTION, "?", startLine, startCol)
+        }
+
+        var errVal = c.toString()
+        return makeToken(TK_ERROR, errVal, startLine, startCol)
+    }
+
+    tokenize(): List {
+        var tokens: List = List()
+        var running = true
+        while (running) {
+            var tok = this.nextToken()
+            tokens.push(tok)
+            if (tok.kind == TK_EOF) {
+                running = false
+            }
+        }
+        return tokens
+    }
+}
+
+tokenizeSource(source: String): List {
+    var kw = buildKeywords()
+    var lexer = Lexer(source: source, pos: 0, line: 1, col: 1, keywords: kw)
+    return lexer.tokenize()
+}

@@ -149,6 +149,68 @@ void nx_println_string(NxString s) {
     printf("%s\n", s);
 }
 
+void nx_print_string(NxString s) {
+    printf("%s", s);
+    fflush(stdout);
+}
+
+void nx_print_int(NxInt n) {
+    printf("%lld", (long long)n);
+    fflush(stdout);
+}
+
+NxString nx_read_line(void) {
+    char* buf = GC_MALLOC(4096);
+    if (!fgets(buf, 4096, stdin)) {
+        buf[0] = '\0';
+    } else {
+        size_t len = strlen(buf);
+        if (len > 0 && buf[len - 1] == '\n') buf[len - 1] = '\0';
+    }
+    return buf;
+}
+
+NxString nx_read_file(NxString path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return "";
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char* buf = GC_MALLOC(size + 1);
+    fread(buf, 1, size, f);
+    buf[size] = '\0';
+    fclose(f);
+    return buf;
+}
+
+NxInt nx_string_to_int(NxString s) {
+    return (NxInt)atoll(s);
+}
+
+NxBool nx_string_equals(NxString a, NxString b) {
+    return strcmp(a, b) == 0 ? NX_TRUE : NX_FALSE;
+}
+
+NxString nx_string_substring(NxString s, NxInt start, NxInt end_excl) {
+    NxInt len = (NxInt)strlen(s);
+    if (start < 0) start = 0;
+    if (end_excl > len) end_excl = len;
+    if (end_excl <= start) return "";
+    NxInt n = end_excl - start;
+    char* buf = GC_MALLOC(n + 1);
+    memcpy(buf, s + start, n);
+    buf[n] = '\0';
+    return buf;
+}
+
+NxBool nx_string_starts_with(NxString s, NxString prefix) {
+    return strncmp(s, prefix, strlen(prefix)) == 0 ? NX_TRUE : NX_FALSE;
+}
+
+NxBool nx_string_contains(NxString s, NxString sub) {
+    return strstr(s, sub) != NULL ? NX_TRUE : NX_FALSE;
+}
+
 void nx_panic(NxString msg) {
     fprintf(stderr, "panic: %s\n", msg);
     exit(1);
