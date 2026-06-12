@@ -160,6 +160,11 @@ fn dump_item(item: &Item, out: &mut String, depth: usize) {
         Item::Function(f) => {
             dump_function(f, out, depth);
         }
+        Item::GlobalConst(g) => {
+            let kw = if g.is_final { "final" } else { "var" };
+            let ty_str = g.ty.as_ref().map(|t| format!(": {}", dump_type(t))).unwrap_or_default();
+            out.push_str(&format!("{}GlobalConst({} {}{})\n", indent(depth), kw, g.name, ty_str));
+        }
     }
 }
 
@@ -493,15 +498,29 @@ pub fn compile_file(nx_path: &str, output: &str) -> Result<(), String> {
 
     let runtime_c = find_runtime_path();
     let runtime_dir = find_runtime_dir();
-    let status = std::process::Command::new("clang")
-        .args(&[&c_path, &runtime_c, "-I", &runtime_dir, "-o", output, "-lgc", "-Wno-return-type"])
-        .status()
-        .map_err(|e| format!("no se pudo ejecutar clang: {}", e))?;
+    let clang = find_clang();
+    let mut cmd = std::process::Command::new(&clang);
+    cmd.args(&[&c_path, &runtime_c, "-I", &runtime_dir, "-o", output, "-Wno-return-type", "-Wno-deprecated-declarations"]);
+    if let Ok(inc) = std::env::var("GC_INCLUDE") {
+        cmd.args(&["-I", &inc]);
+    }
+    if let Ok(lib) = std::env::var("GC_LIB") {
+        cmd.args(&["-L", &lib]);
+    }
+    cmd.arg("-lgc");
+    #[cfg(target_os = "windows")]
+    cmd.args(&["-Xlinker", "/subsystem:console"]);
+    let status = cmd.status()
+        .map_err(|e| format!("no se pudo ejecutar {}: {}", clang, e))?;
 
     if !status.success() {
         return Err(format!("clang falló al compilar {}", c_path));
     }
     Ok(())
+}
+
+fn find_clang() -> String {
+    std::env::var("CC").unwrap_or_else(|_| "clang".to_string())
 }
 
 fn find_runtime_dir() -> String {

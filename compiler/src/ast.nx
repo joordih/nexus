@@ -1,0 +1,213 @@
+final NODE_PROGRAM: Int = 0
+
+final ITEM_MODULE: Int = 10
+final ITEM_IMPORT: Int = 11
+final ITEM_CLASS: Int = 12
+final ITEM_DATA: Int = 13
+final ITEM_VALUE: Int = 14
+final ITEM_INTERFACE: Int = 15
+final ITEM_ANNOTATION: Int = 16
+final ITEM_FUNCTION: Int = 17
+final ITEM_GLOBAL: Int = 18
+
+final EXPR_INT: Int = 30
+final EXPR_FLOAT: Int = 31
+final EXPR_STRING: Int = 32
+final EXPR_CHAR: Int = 33
+final EXPR_BOOL: Int = 34
+final EXPR_NULL: Int = 35
+final EXPR_THIS: Int = 36
+final EXPR_PATH: Int = 37
+final EXPR_UNARY: Int = 38
+final EXPR_BINARY: Int = 39
+final EXPR_CALL: Int = 40
+final EXPR_METHOD: Int = 41
+final EXPR_FIELD: Int = 42
+final EXPR_INDEX: Int = 43
+final EXPR_NULL_ASSERT: Int = 44
+final EXPR_ELVIS: Int = 45
+final EXPR_LAMBDA: Int = 46
+final EXPR_LIST: Int = 47
+final EXPR_SWITCH: Int = 48
+
+final STMT_VAR: Int = 60
+final STMT_RETURN: Int = 61
+final STMT_BREAK: Int = 62
+final STMT_CONTINUE: Int = 63
+final STMT_IF: Int = 64
+final STMT_WHILE: Int = 65
+final STMT_FOR: Int = 66
+final STMT_SWITCH: Int = 67
+final STMT_EXPR: Int = 68
+
+final OP_ADD: Int = 80
+final OP_SUB: Int = 81
+final OP_MUL: Int = 82
+final OP_DIV: Int = 83
+final OP_MOD: Int = 84
+final OP_EQ: Int = 85
+final OP_NE: Int = 86
+final OP_LT: Int = 87
+final OP_LE: Int = 88
+final OP_GT: Int = 89
+final OP_GE: Int = 90
+final OP_AND: Int = 91
+final OP_OR: Int = 92
+final OP_NOT: Int = 93
+final OP_NEG: Int = 94
+
+data FieldDecl {
+    name: String
+    ty: String
+}
+
+data Param {
+    name: String
+    ty: String
+}
+
+data Expr {
+    kind: Int
+    int_val: Int
+    float_val: String
+    str_val: String
+    char_val: String
+    bool_val: Bool
+    op: Int
+    left: Expr?
+    right: Expr?
+    callee: Expr?
+    receiver: Expr?
+    method_name: String
+    field_name: String
+    args: List
+    path_parts: List
+    elems: List
+    lambda_params: List
+    is_safe: Bool
+}
+
+data Stmt {
+    kind: Int
+    is_final: Bool
+    var_name: String
+    var_type: String
+    init_val: Expr?
+    cond: Expr?
+    then_stmts: List
+    else_stmts: List
+    for_var: String
+    iterable: Expr?
+    body_stmts: List
+    switch_subject: Expr?
+    switch_arms: List
+    expr: Expr?
+    assign_val: Expr?
+}
+
+data SwitchArm {
+    is_default: Bool
+    pattern: Expr?
+    stmts: List
+}
+
+data Function {
+    annotations: List
+    name: String
+    params: List
+    return_type: String
+    is_block_body: Bool
+    stmts: List
+    body_expr: Expr?
+}
+
+data ClassDecl {
+    annotations: List
+    name: String
+    type_params: List
+    primary_params: List
+    extends_type: String
+    implements_types: List
+    methods: List
+    fields: List
+}
+
+data DataDecl {
+    annotations: List
+    name: String
+    fields: List
+}
+
+data InterfaceDecl {
+    annotations: List
+    name: String
+    type_params: List
+    method_sigs: List
+}
+
+data GlobalConst {
+    is_final: Bool
+    name: String
+    ty: String
+    const_val: Expr?
+}
+
+data Item {
+    kind: Int
+    module_path: String
+    import_path: String
+    class_decl: ClassDecl?
+    data_decl: DataDecl?
+    interface_decl: InterfaceDecl?
+    function_decl: Function?
+    global_const: GlobalConst?
+}
+
+data Program {
+    items: List
+}
+
+makeExprInt(v: Int): Expr {
+    var e = Expr(kind: EXPR_INT, int_val: v, float_val: "", str_val: "",
+        char_val: "", bool_val: false, op: 0, left: null, right: null,
+        callee: null, receiver: null, method_name: "", field_name: "",
+        args: List(), path_parts: List(), elems: List(),
+        lambda_params: List(), is_safe: false)
+    return e
+}
+
+makeExprString(v: String): Expr {
+    var e = Expr(kind: EXPR_STRING, int_val: 0, float_val: "", str_val: v,
+        char_val: "", bool_val: false, op: 0, left: null, right: null,
+        callee: null, receiver: null, method_name: "", field_name: "",
+        args: List(), path_parts: List(), elems: List(),
+        lambda_params: List(), is_safe: false)
+    return e
+}
+
+makeExprBool(v: Bool): Expr {
+    var e = Expr(kind: EXPR_BOOL, int_val: 0, float_val: "", str_val: "",
+        char_val: "", bool_val: v, op: 0, left: null, right: null,
+        callee: null, receiver: null, method_name: "", field_name: "",
+        args: List(), path_parts: List(), elems: List(),
+        lambda_params: List(), is_safe: false)
+    return e
+}
+
+makeExprPath(parts: List): Expr {
+    var e = Expr(kind: EXPR_PATH, int_val: 0, float_val: "", str_val: "",
+        char_val: "", bool_val: false, op: 0, left: null, right: null,
+        callee: null, receiver: null, method_name: "", field_name: "",
+        args: List(), path_parts: parts, elems: List(),
+        lambda_params: List(), is_safe: false)
+    return e
+}
+
+makeExprBinary(op: Int, l: Expr, r: Expr): Expr {
+    var e = Expr(kind: EXPR_BINARY, int_val: 0, float_val: "", str_val: "",
+        char_val: "", bool_val: false, op: op, left: l, right: r,
+        callee: null, receiver: null, method_name: "", field_name: "",
+        args: List(), path_parts: List(), elems: List(),
+        lambda_params: List(), is_safe: false)
+    return e
+}

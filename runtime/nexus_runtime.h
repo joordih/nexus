@@ -57,6 +57,16 @@ void nx_println_int(NxInt n);
 void nx_println_bool(NxBool b);
 void nx_println_char(NxChar c);
 void nx_println_string(NxString s);
+void nx_print_string(NxString s);
+void nx_print_int(NxInt n);
+
+NxString nx_read_line(void);
+NxString nx_read_file(NxString path);
+NxInt nx_string_to_int(NxString s);
+NxBool nx_string_equals(NxString a, NxString b);
+NxString nx_string_substring(NxString s, NxInt start, NxInt end_excl);
+NxBool nx_string_starts_with(NxString s, NxString prefix);
+NxBool nx_string_contains(NxString s, NxString sub);
 
 void nx_panic(NxString msg);
 

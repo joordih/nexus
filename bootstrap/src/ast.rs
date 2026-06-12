@@ -13,6 +13,15 @@ pub enum Item {
     InterfaceDecl(InterfaceDecl),
     AnnotationDecl(AnnotationDecl),
     Function(Function),
+    GlobalConst(GlobalConst),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalConst {
+    pub is_final: bool,
+    pub name: String,
+    pub ty: Option<Type>,
+    pub value: Expr,
 }
 
 #[derive(Debug, Clone, PartialEq)]

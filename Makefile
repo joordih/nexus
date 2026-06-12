@@ -2,14 +2,16 @@
 .PHONY: test-lexer test-parser test-sema test-codegen test-e2e test-runtime
 
 NXC = build\nxc-stage0.exe
-CC = clang
+CC  ?= clang
+GC_INCLUDE ?=
+GC_LIB     ?=
 
 all: bootstrap
 
 bootstrap:
 	cd bootstrap && cargo build --release
-	if not exist build mkdir build
-	copy bootstrap\target\release\nxc-stage0.exe build\nxc-stage0.exe
+	mkdir -p build
+	cp bootstrap/target/release/nxc-stage0.exe build/nxc-stage0.exe
 
 stage1: bootstrap
 	@echo "Construyendo stage1..."
@@ -28,9 +30,9 @@ test: bootstrap test-runtime test-lexer test-parser test-sema test-codegen test-
 	@echo "Todas las suites de pruebas pasaron."
 
 test-runtime:
-	if not exist build mkdir build
-	$(CC) -I runtime -o build/test_runtime runtime/nexus_runtime.c runtime/test_runtime.c -lgc
-	build/test_runtime
+	mkdir -p build
+	$(CC) -I runtime $(if $(GC_INCLUDE),-I $(GC_INCLUDE)) -o build/test_runtime runtime/nexus_runtime.c runtime/test_runtime.c $(if $(GC_LIB),-L $(GC_LIB)) -lgc -Wno-deprecated-declarations
+	./build/test_runtime
 
 test-lexer: bootstrap
 	$(NXC) test-lexer tests/lexer
