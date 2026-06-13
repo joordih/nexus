@@ -1,5 +1,7 @@
 # Nexus
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/joordih/nexus?utm_source=badge)
+
 Nexus is a statically typed, compiled, general-purpose programming language with automatic memory management and native performance. It targets developers familiar with Java and Kotlin, offering a clean syntax without unnecessary boilerplate.
 
 ## Design goals
