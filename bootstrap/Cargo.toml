@@ -3,4 +3,9 @@ name = "nxc-stage0"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+[dev-dependencies]
+divan = { version = "4.7.0", package = "codspeed-divan-compat" }
+
+[[bench]]
+name = "compiler"
+harness = false

@@ -1,9 +1,4 @@
-mod lexer;
-mod ast;
-mod parser;
-mod sema;
-mod codegen_c;
-mod driver;
+use nxc_stage0::driver;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

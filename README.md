@@ -1,5 +1,7 @@
 # Nexus
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/joordih/nexus?utm_source=badge)
+
 Nexus is a statically typed, compiled, general-purpose programming language with null safety built into the type system and automatic memory management. It compiles to native code through a C backend — there is no virtual machine. The syntax targets developers familiar with Java and Kotlin, without the boilerplate.
 
 The compiler is **self-hosted**: it is written in Nexus and compiles itself, with the bootstrap chain verified down to byte-identical binaries.
