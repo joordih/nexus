@@ -1,6 +1,6 @@
 .PHONY: all bootstrap stage1 stage2 stage3 verify-bootstrap test clean example
 .PHONY: test-lexer test-parser test-sema test-codegen test-e2e test-json test-std test-runtime test-lsp
-.PHONY: nexus-lsp stdlib vscode-nexus build-all example-stdlib
+.PHONY: nexus-lsp stdlib vscode-nexus build-all example-stdlib check-examples
 
 NXC = build/nxc-stage0.exe
 CC ?= clang
@@ -93,6 +93,11 @@ example: bootstrap
 example-stdlib: stage2
 	build/nxc-stage2 compile examples/stdlib_showcase.nx build/stdlib_showcase
 	build/stdlib_showcase
+
+check-examples: stage2
+	-if not exist examples\build mkdir examples\build
+	build/nxc-stage2 compile examples/hello.nx examples/build/hello
+	build/nxc-stage2 compile examples/stdlib_showcase.nx examples/build/stdlib_showcase
 
 clean:
 	cd bootstrap && cargo clean

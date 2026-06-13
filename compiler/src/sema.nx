@@ -1024,7 +1024,7 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
     }
     if (recvTy.kind == NXTYPE_STRING) {
         var m = expr.method_name
-        if (m == "length" || m == "toInt" || m == "charAt") {
+        if (m == "length" || m == "toInt") {
             return makeNxTypeSimple(NXTYPE_INT)
         }
         if (m == "charAt") {

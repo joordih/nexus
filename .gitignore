@@ -1,9 +1,10 @@
-build/
+# build/
 bootstrap/target/
 *.out
 tests/**/*.c
 tests/**/*.c.expected
 compiler/**/*.c
+examples/build/
 
 node_modules/
 out/
