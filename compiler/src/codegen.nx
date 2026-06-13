@@ -735,7 +735,7 @@ class CGen(
                 var modParts: List = expr.receiver!.path_parts
                 if (modParts.len() == 1) {
                     var modName: String = modParts.get(0)
-                    if (modName == "io" || this.ctx.hasImport(modName)) {
+                    if (modName == "io" || (this.getVarType(modName).kind == NXTYPE_UNKNOWN && this.ctx.hasImport(modName))) {
                         return moduleFnReturnType(this.ctx, modName, expr.method_name)
                     }
                 }
