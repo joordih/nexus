@@ -54,7 +54,15 @@ The repository includes a language server written in Nexus itself (`nx/lsp/`) an
 
 This program compiles and runs with the current self-hosted compiler:
 
-```nexus
+<table>
+<tr>
+<th>Nexus</th>
+<th>Output</th>
+</tr>
+<tr>
+<td>
+
+```typescript
 import std.io
 
 data User {
@@ -83,12 +91,17 @@ main(): Void {
 }
 ```
 
-Output:
+</td>
+<td>
 
 ```
 Ada <ada@example.com>
 Grace (no email on file)
 ```
+
+</td>
+</tr>
+</table>
 
 ## Current status
 
