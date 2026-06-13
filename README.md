@@ -48,7 +48,7 @@ The bootstrap chain has four stages:
 
 ### Tooling
 
-The repository includes a language server written in Nexus itself (`nx/lsp/`) and a VS Code extension that uses it. See [Tooling](#tooling).
+The repository includes a language server written in Nexus itself (`nx/lsp/`) and a VS Code extension that uses it. See [Tooling](#tooling-1).
 
 ## Example
 
