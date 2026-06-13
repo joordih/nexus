@@ -1,0 +1,27 @@
+import std.core.strings
+
+class StringBuilder(parts: List) {
+
+    append(s: String): Void {
+        this.parts.push(s)
+    }
+
+    appendChar(c: Char): Void {
+        this.parts.push(c.toString())
+    }
+
+    length(): Int {
+        var total = 0
+        var i = 0
+        while (i < this.parts.len()) {
+            var part: String = this.parts.get(i)
+            total = total + part.length()
+            i = i + 1
+        }
+        return total
+    }
+
+    toString(): String {
+        return joinStrings(this.parts, "")
+    }
+}

@@ -1,0 +1,25 @@
+class Optional(present: Bool, payload: String) {
+
+    isPresent(): Bool {
+        return this.present
+    }
+
+    get(): String {
+        return this.payload
+    }
+
+    orElse(fallback: String): String {
+        if (this.present) {
+            return this.payload
+        }
+        return fallback
+    }
+}
+
+optionalEmpty(): Optional {
+    return Optional(present: false, payload: "")
+}
+
+optionalOf(payload: String): Optional {
+    return Optional(present: true, payload: payload)
+}

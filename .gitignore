@@ -5,5 +5,11 @@ tests/**/*.c
 tests/**/*.c.expected
 compiler/**/*.c
 
-# Working documents — kept locally but not published
-JAVA_SYNTAX.md
+node_modules/
+out/
+package-lock.json
+*.vsix
+
+.old/
+.vscode/**
+.claude/

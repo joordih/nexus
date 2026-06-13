@@ -1,0 +1,402 @@
+final LSP_COMPLETION_TEXT: Int = 1
+final LSP_COMPLETION_KEYWORD: Int = 14
+final LSP_COMPLETION_FUNCTION: Int = 3
+final LSP_COMPLETION_METHOD: Int = 2
+final LSP_COMPLETION_CLASS: Int = 7
+final LSP_COMPLETION_VARIABLE: Int = 6
+final LSP_COMPLETION_CONSTANT: Int = 21
+final LSP_COMPLETION_MODULE: Int = 9
+
+appendKeyword(items: List, label: String): Void {
+    items.push(makeCompletionItem(label, LSP_COMPLETION_KEYWORD, label))
+}
+
+appendType(items: List, label: String): Void {
+    items.push(makeCompletionItem(label, LSP_COMPLETION_CLASS, label))
+}
+
+appendFn(items: List, label: String, detail: String): Void {
+    items.push(makeCompletionItem(label, LSP_COMPLETION_FUNCTION, detail))
+}
+
+appendModule(items: List, label: String): Void {
+    items.push(makeCompletionItem(label, LSP_COMPLETION_MODULE, "import"))
+}
+
+trimLeadingSpace(s: String): String {
+    var i = 0
+    while (i < s.length()) {
+        var c = nx_string_char_at(s, i)
+        if (c != 32 && c != 9) {
+            return s.substring(i, s.length())
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+isImportLineContext(before: String): Bool {
+    var t = trimLeadingSpace(before)
+    if (t.length() < 6) {
+        return false
+    }
+    if (t.substring(0, 6) != "import") {
+        return false
+    }
+    if (t.length() == 6) {
+        return true
+    }
+    var next = nx_string_char_at(t, 6)
+    return next == 32 || next == 9
+}
+
+importPathPrefix(before: String): String {
+    var t = trimLeadingSpace(before)
+    var rest = t.substring(6, t.length())
+    return trimLeadingSpace(rest)
+}
+
+isPathChar(c: Int): Bool {
+    if (c >= 97 && c <= 122) {
+        return true
+    }
+    if (c >= 65 && c <= 90) {
+        return true
+    }
+    if (c >= 48 && c <= 57) {
+        return true
+    }
+    if (c == 95 || c == 46) {
+        return true
+    }
+    return false
+}
+
+isValidImportPrefix(s: String): Bool {
+    var i = 0
+    while (i < s.length()) {
+        if (!isPathChar(nx_string_char_at(s, i))) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+appendImportsFromDir(paths: List, dirPath: String, dotPrefix: String, skipName: String): Void {
+    var files: List = nx_list_dir(dirPath)
+    if (files.len() == 0) {
+        return
+    }
+    var sorted: List = sortStringList(files)
+    var i = 0
+    while (i < sorted.len()) {
+        var name: String = sorted.get(i)
+        if (name.endsWith(".nx")) {
+            var base = name.substring(0, name.length() - 3)
+            if (base != skipName) {
+                paths.push(dotPrefix + base)
+            }
+        }
+        i = i + 1
+    }
+}
+
+allImportPaths(): List {
+    var paths: List = List()
+    paths.push("std.io")
+    appendImportsFromDir(paths, "nx/std", "std.", "")
+    appendImportsFromDir(paths, "nx/std/json", "std.json.", "")
+    appendImportsFromDir(paths, "compiler/src", "compiler.", "main")
+    appendImportsFromDir(paths, "nx/lsp", "lsp.", "")
+    appendImportsFromDir(paths, "nx/lsp/features", "lsp.features.", "")
+    return sortStringList(paths)
+}
+
+pathMatchesPrefix(path: String, prefix: String): Bool {
+    if (prefix.length() == 0) {
+        return true
+    }
+    if (path.length() < prefix.length()) {
+        return false
+    }
+    return path.substring(0, prefix.length()) == prefix
+}
+
+importCompletions(partial: String): List {
+    var items: List = List()
+    var all = allImportPaths()
+    var i = 0
+    while (i < all.len()) {
+        var p: String = all.get(i)
+        if (pathMatchesPrefix(p, partial)) {
+            appendModule(items, p)
+        }
+        i = i + 1
+    }
+    return items
+}
+
+importCompletionIncomplete(partial: String): Bool {
+    if (partial.length() == 0) {
+        return false
+    }
+    var last = nx_string_char_at(partial, partial.length() - 1)
+    if (last == 46) {
+        return true
+    }
+    var all = allImportPaths()
+    var matchCount = 0
+    var i = 0
+    while (i < all.len()) {
+        var p: String = all.get(i)
+        if (pathMatchesPrefix(p, partial)) {
+            matchCount = matchCount + 1
+            if (matchCount > 1) {
+                return true
+            }
+        }
+        i = i + 1
+    }
+    return false
+}
+
+keywordCompletions(): List {
+    var items: List = List()
+    appendKeyword(items, "if")
+    appendKeyword(items, "else")
+    appendKeyword(items, "while")
+    appendKeyword(items, "for")
+    appendKeyword(items, "return")
+    appendKeyword(items, "break")
+    appendKeyword(items, "continue")
+    appendKeyword(items, "try")
+    appendKeyword(items, "catch")
+    appendKeyword(items, "throw")
+    appendKeyword(items, "var")
+    appendKeyword(items, "final")
+    appendKeyword(items, "class")
+    appendKeyword(items, "data")
+    appendKeyword(items, "import")
+    appendKeyword(items, "module")
+    appendKeyword(items, "switch")
+    appendKeyword(items, "this")
+    appendKeyword(items, "true")
+    appendKeyword(items, "false")
+    appendKeyword(items, "null")
+    return items
+}
+
+typeCompletions(): List {
+    var items: List = List()
+    appendType(items, "Int")
+    appendType(items, "Long")
+    appendType(items, "Float")
+    appendType(items, "Double")
+    appendType(items, "Bool")
+    appendType(items, "Char")
+    appendType(items, "String")
+    appendType(items, "Void")
+    appendType(items, "List")
+    appendType(items, "Map")
+    return items
+}
+
+scopeCompletions(ctx: SemaCtx): List {
+    var items: List = List()
+    var i = 0
+    while (i < ctx.fn_names.len()) {
+        var name: String = ctx.fn_names.get(i)
+        appendFn(items, name, "function")
+        i = i + 1
+    }
+    var j = 0
+    while (j < ctx.struct_names.len()) {
+        var sname: String = ctx.struct_names.get(j)
+        appendType(items, sname)
+        j = j + 1
+    }
+    var k = 0
+    while (k < ctx.global_names.len()) {
+        var gname: String = ctx.global_names.get(k)
+        items.push(makeCompletionItem(gname, LSP_COMPLETION_VARIABLE, "global"))
+        k = k + 1
+    }
+    return items
+}
+
+methodCompletionsForType(ctx: SemaCtx, typeName: String): List {
+    var items: List = List()
+    var i = 0
+    while (i < ctx.method_class_names.len()) {
+        var cn: String = ctx.method_class_names.get(i)
+        if (cn == typeName) {
+            var mn: String = ctx.method_fn_names.get(i)
+            items.push(makeCompletionItem(mn, LSP_COMPLETION_METHOD, typeName + "." + mn))
+        }
+        i = i + 1
+    }
+    return items
+}
+
+textBeforeCursor(source: String, line: Int, character: Int): String {
+    var starts = lineStartOffsets(source)
+    if (line < 0 || line >= starts.len()) {
+        return ""
+    }
+    var lineStart: Int = starts.get(line)
+    var lineEnd: Int = source.length()
+    if (line + 1 < starts.len()) {
+        var nextStart: Int = starts.get(line + 1)
+        lineEnd = nextStart - 1
+    }
+    var cursor = lineStart + character
+    if (cursor > lineEnd) {
+        cursor = lineEnd
+    }
+    return source.substring(lineStart, cursor)
+}
+
+findTypeAfterDeclPrefix(source: String, prefix: String): String {
+    var i = 0
+    var srcLen = source.length()
+    var prefixLen = prefix.length()
+    while (i < srcLen) {
+        if (i + prefixLen <= srcLen) {
+            var slice = source.substring(i, i + prefixLen)
+            if (slice == prefix) {
+                var start = i + prefixLen
+                var end = start
+                while (end < srcLen) {
+                    var c = nx_string_char_at(source, end)
+                    if (c == '\n' || c == '\r') {
+                        break
+                    }
+                    end = end + 1
+                }
+                var ty = source.substring(start, end)
+                var j = 0
+                while (j < ty.length()) {
+                    var tc = nx_string_char_at(ty, j)
+                    if (tc == '<') {
+                        return ty.substring(0, j)
+                    }
+                    j = j + 1
+                }
+                return ty
+            }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+receiverTypeName(ctx: SemaCtx, receiver: String, source: String): String {
+    var varPrefix = "var " + receiver + ": "
+    var ty = findTypeAfterDeclPrefix(source, varPrefix)
+    if (ty != "") {
+        return ty
+    }
+    var finalPrefix = "final " + receiver + ": "
+    return findTypeAfterDeclPrefix(source, finalPrefix)
+}
+
+buildCompletionList(ctx: SemaCtx, source: String, line: Int, character: Int): JSONValue {
+    var items: List = List()
+    var before = textBeforeCursor(source, line, character)
+    var incomplete = false
+    if (isImportLineContext(before)) {
+        var partial = importPathPrefix(before)
+        if (isValidImportPrefix(partial)) {
+            var imp = importCompletions(partial)
+            var ii = 0
+            while (ii < imp.len()) {
+                items.push(imp.get(ii))
+                ii = ii + 1
+            }
+            incomplete = importCompletionIncomplete(partial)
+        }
+    } else if (before.endsWith(".")) {
+        var dotIdx = before.length() - 2
+        var nameEnd = dotIdx
+        while (nameEnd >= 0) {
+            var c = nx_string_char_at(before, nameEnd)
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' ||
+                (c >= '0' && c <= '9'))) {
+                break
+            }
+            nameEnd = nameEnd - 1
+        }
+        var recv = before.substring(nameEnd + 1, dotIdx + 1)
+        if (recv == "io") {
+            appendFn(items, "println", "io.println")
+            appendFn(items, "print", "io.print")
+            appendFn(items, "readLine", "io.readLine")
+            appendFn(items, "readFile", "io.readFile")
+            appendFn(items, "writeFile", "io.writeFile")
+        } else {
+            var typeName = receiverTypeName(ctx, recv, source)
+            if (typeName == "String") {
+                appendFn(items, "length", "String.length")
+                appendFn(items, "charAt", "String.charAt")
+                appendFn(items, "substring", "String.substring")
+                appendFn(items, "contains", "String.contains")
+                appendFn(items, "startsWith", "String.startsWith")
+                appendFn(items, "endsWith", "String.endsWith")
+                appendFn(items, "toInt", "String.toInt")
+                appendFn(items, "toString", "String.toString")
+            } else if (typeName == "List") {
+                appendFn(items, "len", "List.len")
+                appendFn(items, "get", "List.get")
+                appendFn(items, "set", "List.set")
+                appendFn(items, "push", "List.push")
+            } else if (typeName != "") {
+                var methods = methodCompletionsForType(ctx, typeName)
+                var mi = 0
+                while (mi < methods.len()) {
+                    items.push(methods.get(mi))
+                    mi = mi + 1
+                }
+            }
+        }
+    } else {
+        var kw = keywordCompletions()
+        var ti = 0
+        while (ti < kw.len()) {
+            items.push(kw.get(ti))
+            ti = ti + 1
+        }
+        var ty = typeCompletions()
+        var tj = 0
+        while (tj < ty.len()) {
+            items.push(ty.get(tj))
+            tj = tj + 1
+        }
+        var sc = scopeCompletions(ctx)
+        var si = 0
+        while (si < sc.len()) {
+            items.push(sc.get(si))
+            si = si + 1
+        }
+    }
+    var keys: List = List()
+    keys.push("isIncomplete")
+    keys.push("items")
+    var vals: List = List()
+    vals.push(makeJsonBool(incomplete))
+    vals.push(makeJsonArray(items))
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+handleCompletion(params: JSONValue, source: String): JSONValue {
+    var uri = extractUri(params)
+    var pos = jsonGetField(params, "position")
+    var line = 0
+    var character = 0
+    if (pos != null) {
+        line = jsonGetInt(pos!, "line")
+        character = jsonGetInt(pos!, "character")
+    }
+    var ctx = analyzeSource(uri, source)
+    return buildCompletionList(ctx, source, line, character)
+}

@@ -1,0 +1,52 @@
+final JSON_NULL: Int = 0
+final JSON_BOOL: Int = 1
+final JSON_INT: Int = 2
+final JSON_FLOAT: Int = 3
+final JSON_STRING: Int = 4
+final JSON_ARRAY: Int = 5
+final JSON_OBJECT: Int = 6
+
+data JSONValue {
+    kind: Int
+    bool_val: Bool
+    int_val: Int
+    float_val: String
+    str_val: String
+    arr_elems: List
+    obj_map: Map
+}
+
+makeJsonNull(): JSONValue {
+    return JSONValue(kind: JSON_NULL, bool_val: false, int_val: 0, float_val: "",
+        str_val: "", arr_elems: List(), obj_map: Map())
+}
+
+makeJsonBool(v: Bool): JSONValue {
+    return JSONValue(kind: JSON_BOOL, bool_val: v, int_val: 0, float_val: "",
+        str_val: "", arr_elems: List(), obj_map: Map())
+}
+
+makeJsonInt(v: Int): JSONValue {
+    return JSONValue(kind: JSON_INT, bool_val: false, int_val: v, float_val: "",
+        str_val: "", arr_elems: List(), obj_map: Map())
+}
+
+makeJsonFloat(v: String): JSONValue {
+    return JSONValue(kind: JSON_FLOAT, bool_val: false, int_val: 0, float_val: v,
+        str_val: "", arr_elems: List(), obj_map: Map())
+}
+
+makeJsonString(v: String): JSONValue {
+    return JSONValue(kind: JSON_STRING, bool_val: false, int_val: 0, float_val: "",
+        str_val: v, arr_elems: List(), obj_map: Map())
+}
+
+makeJsonArray(elems: List): JSONValue {
+    return JSONValue(kind: JSON_ARRAY, bool_val: false, int_val: 0, float_val: "",
+        str_val: "", arr_elems: elems, obj_map: Map())
+}
+
+makeJsonObject(m: Map): JSONValue {
+    return JSONValue(kind: JSON_OBJECT, bool_val: false, int_val: 0, float_val: "",
+        str_val: "", arr_elems: List(), obj_map: m)
+}

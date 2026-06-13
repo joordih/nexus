@@ -1,0 +1,37 @@
+final LSP_SEVERITY_ERROR: Int = 1
+final LSP_SEVERITY_WARNING: Int = 2
+
+buildDiagnostics(uri: String, ctx: SemaCtx): JSONValue {
+    var diags: List = List()
+    var i = 0
+    while (i < ctx.errors.len()) {
+        var err: SemaError = ctx.errors.get(i)
+        var line = err.line - 1
+        var col = err.col - 1
+        if (line < 0) {
+            line = 0
+        }
+        if (col < 0) {
+            col = 0
+        }
+        var endCol = col + 1
+        var range = makeRange(line, col, line, endCol)
+        var diag = makeDiagnostic(range, err.msg, LSP_SEVERITY_ERROR)
+        diags.push(diag)
+        i = i + 1
+    }
+    var emptyArr = makeJsonArray(diags)
+    var keys: List = List()
+    keys.push("uri")
+    keys.push("diagnostics")
+    var vals: List = List()
+    vals.push(makeJsonString(uri))
+    vals.push(emptyArr)
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+publishDiagnostics(uri: String, source: String): JSONValue {
+    var ctx = analyzeSource(uri, source)
+    var params = buildDiagnostics(uri, ctx)
+    return jsonRpcNotification("textDocument/publishDiagnostics", params)
+}

@@ -1,0 +1,18 @@
+class FileOutputStream(path: String, handle: Int) {
+
+    write(content: String): Void {
+        nx_fwrite_n(this.handle, content, content.length())
+    }
+
+    close(): Void {
+        nx_fclose(this.handle)
+    }
+}
+
+openFileOutputStream(path: String): FileOutputStream? {
+    var handle = nx_fopen(path, "wb")
+    if (handle < 0) {
+        return null
+    }
+    return FileOutputStream(path: path, handle: handle)
+}

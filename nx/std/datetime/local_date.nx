@@ -1,0 +1,39 @@
+import std.core.integer
+
+final LOCAL_DATE_SECONDS_PER_DAY: Int = 86400
+
+class LocalDate(year: Int, month: Int, day: Int) {
+
+    toString(): String {
+        return integer.formatInt(this.year) + "-" + integer.formatInt(this.month) + "-" + integer.formatInt(this.day)
+    }
+}
+
+civilFromDays(z: Int): LocalDate {
+    var days = z + 719468
+    var era = days / 146097
+    var doe = days - era * 146097
+    var yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    var y = yoe + era * 400
+    var doy = doe - (365 * yoe + yoe / 4 - yoe / 100 + yoe / 400)
+    var mp = (5 * doy + 2) / 153
+    var d = doy - (153 * mp + 2) / 5 + 1
+    var m = mp
+    if (m < 10) {
+        m = m + 3
+    } else {
+        m = m - 9
+    }
+    if (m <= 2) {
+        y = y + 1
+    }
+    return LocalDate(year: y, month: m, day: d)
+}
+
+localDateFromEpoch(epoch: Int): LocalDate {
+    var days = epoch / LOCAL_DATE_SECONDS_PER_DAY
+    if (epoch < 0 && epoch % LOCAL_DATE_SECONDS_PER_DAY != 0) {
+        days = days - 1
+    }
+    return civilFromDays(days)
+}

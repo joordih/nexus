@@ -1,0 +1,21 @@
+final TRANSPORT_STDIO: Int = 0
+final TRANSPORT_TCP: Int = 1
+final TRANSPORT_INVALID_FD: Int = -1
+
+class LspSession(mode: Int, fd: Int, docs: DocumentStore) {
+
+    readMessage(): JSONValue {
+        if (this.mode == TRANSPORT_STDIO) {
+            return readLspMessage()
+        }
+        return readLspMessageFromFd(this.fd)
+    }
+
+    writeMessage(msg: JSONValue): Void {
+        if (this.mode == TRANSPORT_STDIO) {
+            writeLspMessage(msg)
+        } else {
+            writeLspMessageToFd(this.fd, msg)
+        }
+    }
+}

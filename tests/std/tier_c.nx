@@ -1,0 +1,44 @@
+import std.io
+
+checkBool(name: String, got: Bool, expected: Bool): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+checkString(name: String, got: String, expected: String): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+main(): Void {
+    var allPass = true
+    var caught = false
+    try {
+        throw
+    } catch (err) {
+        caught = true
+    }
+    if (!checkBool("try_catch", caught, true)) {
+        allPass = false
+    }
+    var types: Map = Map()
+    types.insert("Punto", "ok")
+    var entry = types.get("Punto")
+    if (!checkString("reflection_map", entry!, "ok")) {
+        allPass = false
+    }
+    if (allPass) {
+        io.println("Todos los tests std tier_c pasaron.")
+    } else {
+        io.println("Algunos tests std tier_c fallaron.")
+        nx_exit(1)
+    }
+}

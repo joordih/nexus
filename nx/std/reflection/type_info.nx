@@ -1,0 +1,28 @@
+data FieldInfo {
+    name: String
+    ty: String
+}
+
+data TypeInfo {
+    name: String
+    fields: List
+}
+
+class TypeRegistry(types: Map) {
+
+    register(info: TypeInfo): Void {
+        this.types.insert(info.name, info)
+    }
+
+    lookup(name: String): TypeInfo? {
+        return this.types.get(name)
+    }
+}
+
+makeTypeInfo(name: String, fields: List): TypeInfo {
+    return TypeInfo(name: name, fields: fields)
+}
+
+makeFieldInfo(name: String, ty: String): FieldInfo {
+    return FieldInfo(name: name, ty: ty)
+}

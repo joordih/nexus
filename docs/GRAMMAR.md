@@ -1,6 +1,8 @@
 # Gramática de Nexus Core
 
-Este documento es la gramática autoritativa del subconjunto de arranque, Nexus Core. La gramática crece en cada fase que añade características; lo aquí descrito es exclusivamente Core, el subconjunto con el que se escribe el compilador hasta lograr el auto-hospedaje.
+Este documento es la gramática autoritativa de Nexus Core: la sintaxis completa del subconjunto con el que se escribe el compilador autoalojado. El auto-hospedaje (Fases 0–6) está cerrado; la gramática sigue siendo la referencia del lexer y el parser en `compiler/src/`.
+
+No todo lo que la gramática acepta está implementado en sema y codegen. La tabla de cobertura del compilador está en `SPEC.md`. Las ampliaciones del lenguaje previstas (genéricos, borrow checker, concurrencia, async) están en `PLAN.md`.
 
 ## Convenciones de notación
 
@@ -34,7 +36,7 @@ Palabras reservadas:
 var final class data value interface annotation
 import module extends implements
 if else while for in switch case default
-return break continue
+return break continue try catch throw
 true false null this
 ```
 
@@ -76,6 +78,7 @@ program = { item } EOF ;
 
 item    = module_decl
         | import_decl
+        | global_decl
         | class_decl
         | data_decl
         | value_decl
@@ -90,6 +93,12 @@ item    = module_decl
 module_decl = "module" dot_path ;
 import_decl = "import" dot_path ;
 dot_path    = IDENT { "." IDENT } ;
+```
+
+### Constantes y variables globales
+
+```
+global_decl = ( "var" | "final" ) IDENT [ ":" type ] "=" expr [ ";" ] ;
 ```
 
 ### Anotaciones aplicadas
@@ -122,6 +131,8 @@ field_list     = field_decl { "," field_decl } ;
 class_member   = { annotation_use } function ;
 ```
 
+`type_params`, `extends` e `implements` son sintaxis válida; sema y codegen aún no los procesan.
+
 ### Declaración de interfaz
 
 ```
@@ -132,11 +143,15 @@ interface_decl = { annotation_use } "interface" IDENT [ type_params ]
 method_sig     = IDENT "(" [ param_list ] ")" ":" type ;
 ```
 
+Reconocida por el parser; sin sema ni codegen todavía.
+
 ### Declaración de anotación
 
 ```
 annotation_decl = "annotation" IDENT "{" { field_decl } "}" ;
 ```
+
+Reconocida por el parser; sin sema ni codegen todavía.
 
 ### Funciones
 
@@ -172,6 +187,8 @@ stmt        = var_stmt
             | while_stmt
             | for_stmt
             | switch_stmt
+            | try_stmt
+            | throw_stmt
             | expr_stmt ;
 
 var_stmt    = ( "var" | "final" ) IDENT [ ":" type ] "=" expr [ ";" ] ;
@@ -183,6 +200,8 @@ while_stmt  = "while" expr block ;
 for_stmt    = "for" IDENT "in" expr block ;
 switch_stmt = "switch" expr "{" { switch_arm } "}" ;
 switch_arm  = ( "case" expr | "default" ) "=>" ( block | expr [ ";" ] ) ;
+try_stmt    = "try" block "catch" "(" IDENT ")" block ;
+throw_stmt  = "throw" [ ";" ] ;
 expr_stmt   = expr [ ";" ] ;
 ```
 
@@ -263,12 +282,12 @@ De menor a mayor ligadura:
 9   ()  .x  ?.x  []  !      sufija, máxima ligadura
 ```
 
-## Lo que no está en Core
+## Fuera del alcance actual
 
-- Genéricos y traits definidos por el usuario. Llegan en la Fase 7.
-- Borrow checker. Fase 8.
-- Goroutines, primitiva `go` y canales. Fase 9.
-- `async` y `await`. Fase 10.
-- Asignación compuesta `+=`, `-=`, `*=`, `/=`.
+Sintaxis o características no incluidas en Core hoy:
+
+- Asignación compuesta (`+=`, `-=`, `*=`, `/=`).
 - Comprensiones de lista.
 - Macros.
+
+Ampliaciones previstas del lenguaje (genéricos con monomorfización, borrow checker, goroutines/canales, async/await, backend LLVM): ver `PLAN.md`.

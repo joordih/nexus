@@ -63,6 +63,9 @@ final TK_AT: Int = 67
 final TK_QUESTION: Int = 68
 final TK_QUESTION_DOT: Int = 69
 final TK_QUESTION_COLON: Int = 70
+final TK_TRY: Int = 71
+final TK_CATCH: Int = 72
+final TK_THROW: Int = 73
 final TK_ERROR: Int = 99
 
 data Token {
@@ -116,6 +119,9 @@ buildKeywords(): Map {
     m.insert("return", TK_RETURN)
     m.insert("break", TK_BREAK)
     m.insert("continue", TK_CONTINUE)
+    m.insert("try", TK_TRY)
+    m.insert("catch", TK_CATCH)
+    m.insert("throw", TK_THROW)
     m.insert("true", TK_TRUE)
     m.insert("false", TK_FALSE)
     m.insert("null", TK_NULL)
@@ -239,6 +245,8 @@ class Lexer(source: String, pos: Int, line: Int, col: Int, keywords: Map) {
                     buf = buf + "\t"
                 } else if (esc == 'r') {
                     buf = buf + "\r"
+                } else if (esc == '0') {
+                    buf = buf + "\0"
                 } else {
                     buf = buf + esc.toString()
                 }
@@ -262,6 +270,8 @@ class Lexer(source: String, pos: Int, line: Int, col: Int, keywords: Map) {
                 val = "\n"
             } else if (esc == 't') {
                 val = "\t"
+            } else if (esc == 'r') {
+                val = "\r"
             } else if (esc == '0') {
                 val = "\0"
             } else {

@@ -1,0 +1,18 @@
+class FileInputStream(path: String, handle: Int) {
+
+    read(n: Int): String {
+        return nx_fread_n(this.handle, n)
+    }
+
+    close(): Void {
+        nx_fclose(this.handle)
+    }
+}
+
+openFileInputStream(path: String): FileInputStream? {
+    var handle = nx_fopen(path, "rb")
+    if (handle < 0) {
+        return null
+    }
+    return FileInputStream(path: path, handle: handle)
+}

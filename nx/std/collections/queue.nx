@@ -1,0 +1,24 @@
+class Queue(elems: List, head: Int) {
+
+    size(): Int {
+        return this.elems.len() - this.head
+    }
+
+    isEmpty(): Bool {
+        return this.elems.len() == this.head
+    }
+
+    enqueue(elem: String): Void {
+        this.elems.push(elem)
+    }
+
+    dequeue(): String {
+        var item: String = this.elems.get(this.head)
+        this.head = this.head + 1
+        return item
+    }
+
+    peek(): String {
+        return this.elems.get(this.head)
+    }
+}

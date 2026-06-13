@@ -1,0 +1,9 @@
+PASS std: files_exists
+PASS std: path_join
+PASS std: file_size_positive
+PASS std: file_roundtrip
+PASS std: time_now_positive
+PASS std: regex_match
+PASS std: http_request_has_host
+PASS std: env_path_nonempty
+Todos los tests std tier_b pasaron.

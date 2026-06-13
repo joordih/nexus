@@ -1,0 +1,14 @@
+PASS json: null
+PASS json: bool_true
+PASS json: bool_false
+PASS json: int
+PASS json: int_negative
+PASS json: float
+PASS json: string
+PASS json: string_escape
+PASS json: array_empty
+PASS json: array_mixed
+PASS json: object_empty
+PASS json: object_sorted
+PASS json: object_nested
+Todos los tests json pasaron.

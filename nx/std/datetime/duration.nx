@@ -1,0 +1,22 @@
+final DURATION_SECONDS_PER_MINUTE: Int = 60
+final DURATION_SECONDS_PER_HOUR: Int = 3600
+final DURATION_SECONDS_PER_DAY: Int = 86400
+
+class Duration(seconds: Int) {
+
+    toSeconds(): Int {
+        return this.seconds
+    }
+
+    plus(other: Duration): Duration {
+        return Duration(seconds: this.seconds + other.seconds)
+    }
+
+    ofHours(hours: Int): Duration {
+        return Duration(seconds: hours * DURATION_SECONDS_PER_HOUR)
+    }
+}
+
+durationSeconds(n: Int): Duration {
+    return Duration(seconds: n)
+}

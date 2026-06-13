@@ -1,0 +1,9 @@
+import std.io
+import std.datetime.local_date
+import std.datetime.duration
+import std.core.integer
+
+main(): Void {
+    io.println(local_date.localDateFromEpoch(0).toString())
+    io.println(integer.formatInt(duration.durationSeconds(120).toSeconds()))
+}

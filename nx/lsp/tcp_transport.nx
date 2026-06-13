@@ -1,0 +1,9 @@
+startTcpServer(port: Int): Void {
+    var serverFd = nx_tcp_listen(port)
+    var clientFd = nx_tcp_accept(serverFd)
+    nx_tcp_close(serverFd)
+    var docs = DocumentStore(uris: List(), sources: List())
+    var session = LspSession(mode: TRANSPORT_TCP, fd: clientFd, docs: docs)
+    runLspSession(session)
+    nx_tcp_close(clientFd)
+}

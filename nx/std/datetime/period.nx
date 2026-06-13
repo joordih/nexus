@@ -1,0 +1,8 @@
+import std.core.integer
+
+class Period(years: Int, months: Int, days: Int) {
+
+    toString(): String {
+        return integer.formatInt(this.years) + "y" + integer.formatInt(this.months) + "m" + integer.formatInt(this.days) + "d"
+    }
+}

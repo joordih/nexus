@@ -1,0 +1,55 @@
+import compiler.ast
+
+final LSP_SYMBOL_CLASS: Int = 5
+final LSP_SYMBOL_FUNCTION: Int = 12
+final LSP_SYMBOL_METHOD: Int = 6
+final LSP_SYMBOL_VARIABLE: Int = 13
+
+collectDocumentSymbols(prog: Program, uri: String): List {
+    var symbols: List = List()
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        if (item.kind == ITEM_FUNCTION) {
+            if (item.function_decl != null) {
+                var fn: Function = item.function_decl!
+                var range = makeRange(fn.line - 1, fn.col - 1, fn.line - 1, fn.col + fn.name.length())
+                var loc = makeLocation(uri, range)
+                symbols.push(makeSymbolInformation(fn.name, LSP_SYMBOL_FUNCTION, loc))
+            }
+        }
+        if (item.kind == ITEM_CLASS) {
+            if (item.class_decl != null) {
+                var cd: ClassDecl = item.class_decl!
+                var range2 = makeRange(cd.line - 1, cd.col - 1, cd.line - 1, cd.col + cd.name.length())
+                var loc2 = makeLocation(uri, range2)
+                symbols.push(makeSymbolInformation(cd.name, LSP_SYMBOL_CLASS, loc2))
+                var j = 0
+                while (j < cd.methods.len()) {
+                    var m: Function = cd.methods.get(j)
+                    var range3 = makeRange(m.line - 1, m.col - 1, m.line - 1, m.col + m.name.length())
+                    var loc3 = makeLocation(uri, range3)
+                    symbols.push(makeSymbolInformation(m.name, LSP_SYMBOL_METHOD, loc3))
+                    j = j + 1
+                }
+            }
+        }
+        if (item.kind == ITEM_DATA) {
+            if (item.data_decl != null) {
+                var dd: DataDecl = item.data_decl!
+                var range4 = makeRange(dd.line - 1, dd.col - 1, dd.line - 1, dd.col + dd.name.length())
+                var loc4 = makeLocation(uri, range4)
+                symbols.push(makeSymbolInformation(dd.name, LSP_SYMBOL_CLASS, loc4))
+            }
+        }
+        i = i + 1
+    }
+    return symbols
+}
+
+handleDocumentSymbol(params: JSONValue, source: String, uri: String): JSONValue {
+    var tokens = tokenizeSource(source)
+    var prog = parseSource(tokens)
+    var symbols = collectDocumentSymbols(prog, uri)
+    return makeJsonArray(symbols)
+}

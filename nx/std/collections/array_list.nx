@@ -1,0 +1,26 @@
+class ArrayList(elems: List) {
+
+    size(): Int {
+        return this.elems.len()
+    }
+
+    isEmpty(): Bool {
+        return this.elems.len() == 0
+    }
+
+    add(elem: String): Void {
+        this.elems.push(elem)
+    }
+
+    get(index: Int): String {
+        return this.elems.get(index)
+    }
+
+    set(index: Int, elem: String): Void {
+        this.elems.set(index, elem)
+    }
+
+    clear(): Void {
+        this.elems = List()
+    }
+}

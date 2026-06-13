@@ -1,0 +1,56 @@
+sortTreeMapKeys(lst: List): List {
+    var n = lst.len()
+    var sorted: List = List()
+    var i = 0
+    while (i < n) {
+        var item: String = lst.get(i)
+        sorted.push(item)
+        i = i + 1
+    }
+    var i2 = 0
+    while (i2 < n) {
+        var j = i2 + 1
+        while (j < n) {
+            var a: String = sorted.get(i2)
+            var b: String = sorted.get(j)
+            if (nx_string_lt(b, a)) {
+                sorted.set(i2, b)
+                sorted.set(j, a)
+            }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+    return sorted
+}
+
+class TreeMap(sortedKeys: List, entries: Map) {
+
+    size(): Int {
+        return this.entries.len()
+    }
+
+    isEmpty(): Bool {
+        return this.entries.len() == 0
+    }
+
+    put(key: String, payload: String): Void {
+        if (!this.entries.contains(key)) {
+            this.sortedKeys.push(key)
+            this.sortedKeys = sortTreeMapKeys(this.sortedKeys)
+        }
+        this.entries.insert(key, payload)
+    }
+
+    get(key: String): String? {
+        return this.entries.get(key)
+    }
+
+    containsKey(key: String): Bool {
+        return this.entries.contains(key)
+    }
+
+    keyAt(index: Int): String {
+        return this.sortedKeys.get(index)
+    }
+}

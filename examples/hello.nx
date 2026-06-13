@@ -1,5 +1,8 @@
 import std.io
+import std.json
 
 main(): Void {
     io.println("Hola, Nexus!")
+    var v = json.parse("{\"msg\":\"hola\"}")
+    io.println(json.stringify(v))
 }

@@ -28,6 +28,53 @@ int main(void) {
         return 1;
     }
 
+    nx_map_insert(map, "alpha", &val);
+    NxList* keys = nx_map_keys(map);
+    if (nx_list_len(keys) != 2) {
+        fprintf(stderr, "map keys len FAIL\n");
+        return 1;
+    }
+
+    char header_buf[] = "Content-Length: 5\r\n";
+    FILE* tmp = tmpfile();
+    if (!tmp) {
+        fprintf(stderr, "tmpfile FAIL\n");
+        return 1;
+    }
+    fwrite(header_buf, 1, strlen(header_buf), tmp);
+    fwrite("hello", 1, 5, tmp);
+    fflush(tmp);
+    rewind(tmp);
+
+    char line_buf[256];
+    int line_pos = 0;
+    int ch;
+    while (line_pos < 255) {
+        ch = fgetc(tmp);
+        if (ch == EOF) break;
+        if (ch == '\r') {
+            int next = fgetc(tmp);
+            if (next != '\n' && next != EOF) ungetc(next, tmp);
+            break;
+        }
+        if (ch == '\n') break;
+        line_buf[line_pos++] = (char)ch;
+    }
+    line_buf[line_pos] = '\0';
+    if (strcmp(line_buf, "Content-Length: 5") != 0) {
+        fprintf(stderr, "header line parse FAIL\n");
+        return 1;
+    }
+
+    char body_buf[16];
+    size_t body_got = fread(body_buf, 1, 5, tmp);
+    body_buf[body_got] = '\0';
+    if (strcmp(body_buf, "hello") != 0) {
+        fprintf(stderr, "body read FAIL\n");
+        return 1;
+    }
+    fclose(tmp);
+
     printf("runtime OK\n");
     return 0;
 }

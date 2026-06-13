@@ -1,0 +1,1535 @@
+import std.io
+import compiler.ast
+import compiler.sema
+import compiler.parser
+
+class CGen(
+    ctx: SemaCtx,
+    out: String,
+    indent: Int,
+    tmp_counter: Int,
+    current_class: String,
+    var_type_names: List,
+    var_type_vals: List
+) {
+
+    emitLine(s: String): Void {
+        var ind = ""
+        var i = 0
+        while (i < this.indent) {
+            ind = ind + "    "
+            i = i + 1
+        }
+        this.out = this.out + ind + s + "\n"
+    }
+
+    emitRaw(s: String): Void {
+        this.out = this.out + s + "\n"
+    }
+
+    freshTmp(): String {
+        var n = this.tmp_counter
+        this.tmp_counter = this.tmp_counter + 1
+        return "_nx_tmp_" + n.toString()
+    }
+
+    setVarType(name: String, ty: NxType): Void {
+        this.var_type_names.push(name)
+        this.var_type_vals.push(ty)
+    }
+
+    getVarType(name: String): NxType {
+        var i = this.var_type_names.len() - 1
+        while (i >= 0) {
+            var n: String = this.var_type_names.get(i)
+            if (n == name) {
+                var t: NxType = this.var_type_vals.get(i)
+                return t
+            }
+            i = i - 1
+        }
+        return nxTypeUnknown()
+    }
+
+    clearVarTypes(): Void {
+        this.var_type_names = List()
+        this.var_type_vals = List()
+    }
+
+    nxTypeToCType(ty: NxType): String {
+        if (ty.kind == NXTYPE_INT || ty.kind == NXTYPE_LONG) {
+            return "NxInt"
+        }
+        if (ty.kind == NXTYPE_FLOAT || ty.kind == NXTYPE_DOUBLE) {
+            return "double"
+        }
+        if (ty.kind == NXTYPE_BOOL) {
+            return "NxBool"
+        }
+        if (ty.kind == NXTYPE_CHAR) {
+            return "NxChar"
+        }
+        if (ty.kind == NXTYPE_STRING) {
+            return "NxString"
+        }
+        if (ty.kind == NXTYPE_VOID) {
+            return "void"
+        }
+        if (ty.kind == NXTYPE_NULL) {
+            return "void*"
+        }
+        if (ty.kind == NXTYPE_NAMED) {
+            var si = this.ctx.findStruct(ty.name)
+            if (si != null) {
+                return "NxStruct_" + ty.name + "*"
+            }
+            return "void*"
+        }
+        if (ty.kind == NXTYPE_LIST) {
+            return "NxList*"
+        }
+        if (ty.kind == NXTYPE_MAP) {
+            return "NxMap*"
+        }
+        if (ty.kind == NXTYPE_NULLABLE) {
+            if (ty.elem != null) {
+                return this.nxTypeToCType(ty.elem!)
+            }
+            return "void*"
+        }
+        return "void*"
+    }
+
+    voidCastOut(ty: NxType, expr: String): String {
+        if (ty.kind == NXTYPE_INT || ty.kind == NXTYPE_LONG) {
+            return "(NxInt)(intptr_t)(" + expr + ")"
+        }
+        if (ty.kind == NXTYPE_BOOL) {
+            return "(NxBool)(intptr_t)(" + expr + ")"
+        }
+        if (ty.kind == NXTYPE_CHAR) {
+            return "(NxChar)(intptr_t)(" + expr + ")"
+        }
+        var cty = this.nxTypeToCType(ty)
+        return "(" + cty + ")(" + expr + ")"
+    }
+
+    voidCastIn(ty: NxType, val: String): String {
+        if (ty.kind == NXTYPE_INT || ty.kind == NXTYPE_LONG || ty.kind == NXTYPE_BOOL || ty.kind == NXTYPE_CHAR) {
+            return "(void*)(intptr_t)(" + val + ")"
+        }
+        return "(void*)(" + val + ")"
+    }
+
+    fnSignature(fn: Function, className: String): String {
+        var retTy = this.ctx.resolveType(fn.return_type)
+        var retC = this.nxTypeToCType(retTy)
+        var fnName = ""
+        if (className != "") {
+            fnName = "nx_method_" + className + "_" + fn.name
+        } else {
+            fnName = "nx_fn_" + fn.name
+        }
+        var params = ""
+        if (className != "") {
+            params = "NxStruct_" + className + "* this"
+        }
+        var i = 0
+        while (i < fn.params.len()) {
+            var p: Param = fn.params.get(i)
+            var pt = this.ctx.resolveType(p.ty)
+            var pc = this.nxTypeToCType(pt)
+            if (params != "") {
+                params = params + ", "
+            }
+            params = params + pc + " " + p.name
+            i = i + 1
+        }
+        return retC + " " + fnName + "(" + params + ")"
+    }
+
+    generate(prog: Program): String {
+        this.emitLine("#include \"nexus_runtime.h\"")
+        this.emitRaw("")
+
+        var sortedStructNames: List = List()
+        var i = 0
+        while (i < this.ctx.struct_names.len()) {
+            var n: String = this.ctx.struct_names.get(i)
+            sortedStructNames.push(n)
+            i = i + 1
+        }
+        sortedStructNames = sortList(sortedStructNames)
+
+        var j = 0
+        while (j < sortedStructNames.len()) {
+            var n2: String = sortedStructNames.get(j)
+            this.emitLine("typedef struct NxStruct_" + n2 + " NxStruct_" + n2 + ";")
+            j = j + 1
+        }
+        if (sortedStructNames.len() > 0) {
+            this.emitRaw("")
+        }
+
+        var k = 0
+        while (k < sortedStructNames.len()) {
+            var n3: String = sortedStructNames.get(k)
+            var si = this.ctx.findStruct(n3)
+            if (si != null) {
+                this.emitLine("struct NxStruct_" + n3 + " {")
+                var sortedFields: List = sortStructFields(si!.fields)
+                var fi = 0
+                while (fi < sortedFields.len()) {
+                    var sf: StructField = sortedFields.get(fi)
+                    var fty = nxTypeUnknown()
+                    if (sf.ty != null) {
+                        fty = sf.ty!
+                    }
+                    var fc = this.nxTypeToCType(fty)
+                    this.emitLine("    " + fc + " " + sf.name + ";")
+                    fi = fi + 1
+                }
+                this.emitLine("};")
+                this.emitRaw("")
+            }
+            k = k + 1
+        }
+
+        var hasGlobals = false
+        var gi = 0
+        while (gi < prog.items.len()) {
+            var item: Item = prog.items.get(gi)
+            if (item.kind == ITEM_GLOBAL) {
+                var gc: GlobalConst = item.global_const!
+                var gty = this.ctx.resolveType(gc.ty)
+                var gtyC = this.nxTypeToCType(gty)
+                var gval = this.genExpr(gc.const_val!, null)
+                var qual = "static const"
+                if (!gc.is_final) {
+                    qual = "static"
+                }
+                this.emitLine(qual + " " + gtyC + " " + gc.name + " = " + gval + ";")
+                hasGlobals = true
+            }
+            gi = gi + 1
+        }
+        if (hasGlobals) {
+            this.emitRaw("")
+        }
+
+        var fwds: List = List()
+        var fwdi = 0
+        while (fwdi < prog.items.len()) {
+            var item2: Item = prog.items.get(fwdi)
+            if (item2.kind == ITEM_FUNCTION) {
+                var fn: Function = item2.function_decl!
+                fwds.push(this.fnSignature(fn, "") + ";")
+            }
+            if (item2.kind == ITEM_CLASS) {
+                var cd: ClassDecl = item2.class_decl!
+                var mi = 0
+                while (mi < cd.methods.len()) {
+                    var fn2: Function = cd.methods.get(mi)
+                    fwds.push(this.fnSignature(fn2, cd.name) + ";")
+                    mi = mi + 1
+                }
+            }
+            fwdi = fwdi + 1
+        }
+        var fwdj = 0
+        while (fwdj < fwds.len()) {
+            var decl: String = fwds.get(fwdj)
+            this.emitLine(decl)
+            fwdj = fwdj + 1
+        }
+        if (fwds.len() > 0) {
+            this.emitRaw("")
+        }
+
+        var hasMain = false
+        var pi = 0
+        while (pi < prog.items.len()) {
+            var item3: Item = prog.items.get(pi)
+            if (item3.kind == ITEM_FUNCTION) {
+                var fn3: Function = item3.function_decl!
+                if (fn3.name == "main") {
+                    hasMain = true
+                }
+            }
+            pi = pi + 1
+        }
+
+        var ii = 0
+        while (ii < prog.items.len()) {
+            var item4: Item = prog.items.get(ii)
+            this.genItem(item4)
+            ii = ii + 1
+        }
+
+        if (hasMain) {
+            this.emitLine("int main(int argc, char** argv) {")
+            this.emitLine("    nexus_init();")
+            this.emitLine("    nexus_set_args(argc, argv);")
+            this.emitLine("    nx_fn_main();")
+            this.emitLine("    return 0;")
+            this.emitLine("}")
+            this.emitRaw("")
+        }
+
+        return this.out
+    }
+
+    genItem(item: Item): Void {
+        if (item.kind == ITEM_FUNCTION) {
+            var fn: Function = item.function_decl!
+            var sig = this.fnSignature(fn, "")
+            this.emitLine(sig + " {")
+            this.indent = this.indent + 1
+            this.clearVarTypes()
+            var pi = 0
+            while (pi < fn.params.len()) {
+                var p: Param = fn.params.get(pi)
+                var pt = this.ctx.resolveType(p.ty)
+                this.setVarType(p.name, pt)
+                pi = pi + 1
+            }
+            this.genFnBody(fn)
+            this.indent = this.indent - 1
+            this.emitLine("}")
+            this.emitRaw("")
+            return
+        }
+        if (item.kind == ITEM_CLASS) {
+            var cd: ClassDecl = item.class_decl!
+            this.current_class = cd.name
+            var mi = 0
+            while (mi < cd.methods.len()) {
+                var fn2: Function = cd.methods.get(mi)
+                var sig2 = this.fnSignature(fn2, cd.name)
+                this.emitLine(sig2 + " {")
+                this.indent = this.indent + 1
+                this.clearVarTypes()
+                this.setVarType("this", makeNxTypeNamed(cd.name))
+                var pi2 = 0
+                while (pi2 < cd.primary_params.len()) {
+                    var pp: FieldDecl = cd.primary_params.get(pi2)
+                    var ppt = this.ctx.resolveType(pp.ty)
+                    this.setVarType(pp.name, ppt)
+                    pi2 = pi2 + 1
+                }
+                var pi3 = 0
+                while (pi3 < fn2.params.len()) {
+                    var p3: Param = fn2.params.get(pi3)
+                    var pt3 = this.ctx.resolveType(p3.ty)
+                    this.setVarType(p3.name, pt3)
+                    pi3 = pi3 + 1
+                }
+                this.genFnBody(fn2)
+                this.indent = this.indent - 1
+                this.emitLine("}")
+                this.emitRaw("")
+                mi = mi + 1
+            }
+            this.current_class = ""
+            return
+        }
+    }
+
+    genFnBody(fn: Function): Void {
+        if (fn.is_block_body) {
+            this.genStmts(fn.stmts)
+            return
+        }
+        if (fn.body_expr != null) {
+            var val = this.genExpr(fn.body_expr!, null)
+            this.emitLine("return " + val + ";")
+        }
+    }
+
+    genStmts(stmts: List): Void {
+        var i = 0
+        while (i < stmts.len()) {
+            var s: Stmt = stmts.get(i)
+            this.genStmt(s)
+            i = i + 1
+        }
+    }
+
+    genStmt(stmt: Stmt): Void {
+        if (stmt.kind == STMT_VAR) {
+            var exprTy = this.inferExprType(stmt.init_val!)
+            var declaredTy = nxTypeUnknown()
+            if (stmt.var_type != "") {
+                declaredTy = this.ctx.resolveType(stmt.var_type)
+            } else {
+                declaredTy = exprTy
+            }
+            var cty = this.nxTypeToCType(declaredTy)
+            var val = this.genExpr(stmt.init_val!, declaredTy)
+            this.setVarType(stmt.var_name, declaredTy)
+            this.emitLine(cty + " " + stmt.var_name + " = " + val + ";")
+            return
+        }
+        if (stmt.kind == STMT_RETURN) {
+            if (stmt.init_val != null) {
+                var val2 = this.genExpr(stmt.init_val!, null)
+                this.emitLine("return " + val2 + ";")
+            } else {
+                this.emitLine("return;")
+            }
+            return
+        }
+        if (stmt.kind == STMT_BREAK) {
+            this.emitLine("break;")
+            return
+        }
+        if (stmt.kind == STMT_CONTINUE) {
+            this.emitLine("continue;")
+            return
+        }
+        if (stmt.kind == STMT_IF) {
+            var cond = this.genExpr(stmt.cond!, null)
+            this.emitLine("if (" + cond + ") {")
+            this.indent = this.indent + 1
+            this.genStmts(stmt.then_stmts)
+            this.indent = this.indent - 1
+            if (stmt.else_stmts.len() > 0) {
+                var first: Stmt = stmt.else_stmts.get(0)
+                if (first.kind == STMT_IF && stmt.else_stmts.len() == 1) {
+                    this.emitLine("} else {")
+                    this.indent = this.indent + 1
+                    this.genStmt(first)
+                    this.indent = this.indent - 1
+                    this.emitLine("}")
+                } else {
+                    this.emitLine("} else {")
+                    this.indent = this.indent + 1
+                    this.genStmts(stmt.else_stmts)
+                    this.indent = this.indent - 1
+                    this.emitLine("}")
+                }
+            } else {
+                this.emitLine("}")
+            }
+            return
+        }
+        if (stmt.kind == STMT_WHILE) {
+            var cond2 = this.genExpr(stmt.cond!, null)
+            this.emitLine("while (" + cond2 + ") {")
+            this.indent = this.indent + 1
+            this.genStmts(stmt.body_stmts)
+            this.indent = this.indent - 1
+            this.emitLine("}")
+            return
+        }
+        if (stmt.kind == STMT_FOR) {
+            var iter = this.genExpr(stmt.iterable!, null)
+            var iterTmp = this.freshTmp()
+            var idxTmp = this.freshTmp()
+            this.emitLine("NxList* " + iterTmp + " = " + iter + ";")
+            this.emitLine("for (NxInt " + idxTmp + " = 0; " + idxTmp + " < nx_list_len(" + iterTmp + "); " + idxTmp + "++) {")
+            this.indent = this.indent + 1
+            var iterTy = this.inferExprType(stmt.iterable!)
+            var elemTy = nxTypeUnknown()
+            if (iterTy.kind == NXTYPE_LIST && iterTy.elem != null) {
+                elemTy = iterTy.elem!
+            }
+            var elemC = this.nxTypeToCType(elemTy)
+            var getExpr = "nx_list_get(" + iterTmp + ", " + idxTmp + ")"
+            var castedElem = this.voidCastOut(elemTy, getExpr)
+            this.emitLine(elemC + " " + stmt.for_var + " = " + castedElem + ";")
+            this.setVarType(stmt.for_var, elemTy)
+            this.genStmts(stmt.body_stmts)
+            this.indent = this.indent - 1
+            this.emitLine("}")
+            return
+        }
+        if (stmt.kind == STMT_SWITCH) {
+            this.genSwitchStmt(stmt)
+            return
+        }
+        if (stmt.kind == STMT_TRY) {
+            var jbTmp = this.freshTmp()
+            var trTmp = this.freshTmp()
+            this.emitLine("{ jmp_buf " + jbTmp + ";")
+            this.emitLine("int " + trTmp + " = setjmp(" + jbTmp + ");")
+            this.emitLine("if (" + trTmp + " == 0) {")
+            this.indent = this.indent + 1
+            this.emitLine("nx_try_push(" + jbTmp + ");")
+            this.genStmts(stmt.then_stmts)
+            this.emitLine("nx_try_pop();")
+            this.indent = this.indent - 1
+            this.emitLine("} else {")
+            this.indent = this.indent + 1
+            this.genStmts(stmt.else_stmts)
+            this.emitLine("nx_try_pop();")
+            this.indent = this.indent - 1
+            this.emitLine("}}")
+            return
+        }
+        if (stmt.kind == STMT_THROW) {
+            this.emitLine("nx_throw();")
+            return
+        }
+        if (stmt.kind == STMT_EXPR) {
+            if (stmt.assign_val != null) {
+                var lhs = this.genLvalue(stmt.expr!)
+                var rhs = this.genExpr(stmt.assign_val!, null)
+                this.emitLine(lhs + " = " + rhs + ";")
+            } else {
+                var val3 = this.genExpr(stmt.expr!, null)
+                this.emitLine(val3 + ";")
+            }
+            return
+        }
+    }
+
+    genSwitchStmt(stmt: Stmt): Void {
+        var subj = this.genExpr(stmt.switch_subject!, null)
+        var subjTmp = this.freshTmp()
+        var subjTy = this.inferExprType(stmt.switch_subject!)
+        var subjC = this.nxTypeToCType(subjTy)
+        this.emitLine(subjC + " " + subjTmp + " = " + subj + ";")
+        var first = true
+        var i = 0
+        while (i < stmt.switch_arms.len()) {
+            var arm: SwitchArm = stmt.switch_arms.get(i)
+            var cond = ""
+            if (arm.is_default) {
+                cond = "1"
+            } else {
+                var caseVal = this.genExpr(arm.pattern!, null)
+                if (subjTy.kind == NXTYPE_STRING) {
+                    cond = "nx_string_equals(" + subjTmp + ", " + caseVal + ")"
+                } else {
+                    cond = subjTmp + " == " + caseVal
+                }
+            }
+            if (first) {
+                this.emitLine("if (" + cond + ") {")
+                first = false
+            } else {
+                this.emitLine("} else if (" + cond + ") {")
+            }
+            this.indent = this.indent + 1
+            this.genStmts(arm.stmts)
+            this.indent = this.indent - 1
+            i = i + 1
+        }
+        if (!first) {
+            this.emitLine("}")
+        }
+    }
+
+    genLvalue(expr: Expr): String {
+        if (expr.kind == EXPR_PATH) {
+            var parts: List = expr.path_parts
+            if (parts.len() == 1) {
+                var name: String = parts.get(0)
+                return name
+            }
+            var result = ""
+            var i = 0
+            while (i < parts.len()) {
+                if (i > 0) {
+                    result = result + "_"
+                }
+                var p: String = parts.get(i)
+                result = result + p
+                i = i + 1
+            }
+            return result
+        }
+        if (expr.kind == EXPR_THIS) {
+            return "this"
+        }
+        if (expr.kind == EXPR_FIELD) {
+            var recv = this.genLvalue(expr.receiver!)
+            return recv + "->" + expr.field_name
+        }
+        return "_nx_invalid_lvalue"
+    }
+
+    inferExprType(expr: Expr): NxType {
+        if (expr.kind == EXPR_INT) {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (expr.kind == EXPR_FLOAT) {
+            return makeNxTypeSimple(NXTYPE_DOUBLE)
+        }
+        if (expr.kind == EXPR_STRING) {
+            return makeNxTypeSimple(NXTYPE_STRING)
+        }
+        if (expr.kind == EXPR_CHAR) {
+            return makeNxTypeSimple(NXTYPE_CHAR)
+        }
+        if (expr.kind == EXPR_BOOL) {
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        if (expr.kind == EXPR_NULL) {
+            return nxTypeUnknown()
+        }
+        if (expr.kind == EXPR_THIS) {
+            if (this.current_class != "") {
+                return makeNxTypeNamed(this.current_class)
+            }
+            return nxTypeUnknown()
+        }
+        if (expr.kind == EXPR_PATH) {
+            var name: String = expr.path_parts.get(0)
+            var t = this.getVarType(name)
+            if (t.kind != NXTYPE_UNKNOWN) {
+                return t
+            }
+            var g = this.ctx.findGlobal(name)
+            if (g != null) {
+                return g!
+            }
+            if (name == "List") {
+                return makeNxTypeList(nxTypeUnknown())
+            }
+            if (name == "Map") {
+                return makeNxTypeMap(nxTypeUnknown(), nxTypeUnknown())
+            }
+            var si = this.ctx.findStruct(name)
+            if (si != null) {
+                return makeNxTypeNamed(name)
+            }
+            return nxTypeUnknown()
+        }
+        if (expr.kind == EXPR_CALL) {
+            return this.inferCallType(expr)
+        }
+        if (expr.kind == EXPR_METHOD) {
+            return this.inferMethodType(expr)
+        }
+        if (expr.kind == EXPR_FIELD) {
+            var recvTy = this.inferExprType(expr.receiver!)
+            if (recvTy.kind == NXTYPE_STRING && expr.field_name == "length") {
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            if (recvTy.kind == NXTYPE_NAMED) {
+                var si2 = this.ctx.findStruct(recvTy.name)
+                if (si2 != null) {
+                    var fi = 0
+                    while (fi < si2!.fields.len()) {
+                        var sf: StructField = si2!.fields.get(fi)
+                        if (sf.name == expr.field_name) {
+                            if (sf.ty != null) {
+                                return sf.ty!
+                            }
+                        }
+                        fi = fi + 1
+                    }
+                }
+            }
+            return nxTypeUnknown()
+        }
+        if (expr.kind == EXPR_BINARY) {
+            if (expr.op == OP_ADD) {
+                var lt = this.inferExprType(expr.left!)
+                var rt = this.inferExprType(expr.right!)
+                if (lt.kind == NXTYPE_STRING || rt.kind == NXTYPE_STRING) {
+                    return makeNxTypeSimple(NXTYPE_STRING)
+                }
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            if (expr.op == OP_SUB || expr.op == OP_MUL || expr.op == OP_DIV || expr.op == OP_MOD) {
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        if (expr.kind == EXPR_UNARY) {
+            if (expr.op == OP_NEG) {
+                return this.inferExprType(expr.left!)
+            }
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        if (expr.kind == EXPR_LIST) {
+            return makeNxTypeList(nxTypeUnknown())
+        }
+        if (expr.kind == EXPR_INDEX) {
+            var baseTy = this.inferExprType(expr.left!)
+            if (baseTy.kind == NXTYPE_LIST && baseTy.elem != null) {
+                return baseTy.elem!
+            }
+            return nxTypeUnknown()
+        }
+        if (expr.kind == EXPR_NULL_ASSERT) {
+            var innerTy = this.inferExprType(expr.left!)
+            if (innerTy.kind == NXTYPE_NULLABLE && innerTy.elem != null) {
+                return innerTy.elem!
+            }
+            return innerTy
+        }
+        if (expr.kind == EXPR_ELVIS) {
+            return this.inferExprType(expr.left!)
+        }
+        return nxTypeUnknown()
+    }
+
+    inferCallType(expr: Expr): NxType {
+        var callee: Expr = expr.callee!
+        if (callee.kind == EXPR_PATH) {
+            var parts: List = callee.path_parts
+            if (parts.len() == 2) {
+                return moduleFnReturnType(this.ctx, parts.get(0), parts.get(1))
+            }
+            var name: String = callee.path_parts.get(0)
+            if (name == "List") {
+                return makeNxTypeList(nxTypeUnknown())
+            }
+            if (name == "Map") {
+                return makeNxTypeMap(nxTypeUnknown(), nxTypeUnknown())
+            }
+            if (name == "nx_string_char_at") {
+                return makeNxTypeSimple(NXTYPE_CHAR)
+            }
+            if (name == "nx_string_substring" || name == "nx_get_arg" ||
+                name == "nx_read_header_line" || name == "nx_read_stdin_n" ||
+                name == "nx_run_capture" || name == "nx_run_binary_capture" ||
+                name == "nx_tcp_read_line" || name == "nx_tcp_read" ||
+                name == "nx_fread_n" || name == "nx_getenv") {
+                return makeNxTypeSimple(NXTYPE_STRING)
+            }
+            if (name == "nx_get_arg_count" || name == "nx_tcp_listen" || name == "nx_tcp_accept" ||
+                name == "nx_write_stdout_n" || name == "nx_stat_size" || name == "nx_fopen" ||
+                name == "nx_time_now" || name == "nx_tcp_connect") {
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            if (name == "nx_string_ends_with" || name == "nx_string_lt" ||
+                name == "nx_file_exists" || name == "nx_mkdir" || name == "nx_delete" ||
+                name == "nx_rename" || name == "nx_stat_is_dir") {
+                return makeNxTypeSimple(NXTYPE_BOOL)
+            }
+            if (name == "nx_string_len") {
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            if (name == "nx_string_contains") {
+                return makeNxTypeSimple(NXTYPE_BOOL)
+            }
+            if (name == "nx_map_keys" || name == "nx_list_dir") {
+                return makeNxTypeList(nxTypeUnknown())
+            }
+            var si = this.ctx.findStruct(name)
+            if (si != null) {
+                return makeNxTypeNamed(name)
+            }
+            var fi = this.ctx.findFn(name)
+            if (fi != null) {
+                if (fi!.return_type != null) {
+                    return fi!.return_type!
+                }
+            }
+        }
+        return nxTypeUnknown()
+    }
+
+    inferMethodType(expr: Expr): NxType {
+        if (expr.receiver != null) {
+            if (expr.receiver!.kind == EXPR_PATH) {
+                var modParts: List = expr.receiver!.path_parts
+                if (modParts.len() == 1) {
+                    var modName: String = modParts.get(0)
+                    if (modName == "io" || this.ctx.hasImport(modName)) {
+                        return moduleFnReturnType(this.ctx, modName, expr.method_name)
+                    }
+                }
+            }
+        }
+        var recvTy = this.inferExprType(expr.receiver!)
+        if (recvTy.kind == NXTYPE_STRING) {
+            if (expr.method_name == "length" || expr.method_name == "toInt") {
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            if (expr.method_name == "charAt") {
+                return makeNxTypeSimple(NXTYPE_CHAR)
+            }
+            if (expr.method_name == "equals" || expr.method_name == "startsWith" ||
+                expr.method_name == "contains" || expr.method_name == "endsWith") {
+                return makeNxTypeSimple(NXTYPE_BOOL)
+            }
+            return makeNxTypeSimple(NXTYPE_STRING)
+        }
+        if (recvTy.kind == NXTYPE_LIST) {
+            if (expr.method_name == "len" || expr.method_name == "size") {
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            if (expr.method_name == "get" && recvTy.elem != null) {
+                return recvTy.elem!
+            }
+            if (expr.method_name == "isEmpty") {
+                return makeNxTypeSimple(NXTYPE_BOOL)
+            }
+            return nxTypeUnknown()
+        }
+        if (recvTy.kind == NXTYPE_MAP) {
+            if (expr.method_name == "len" || expr.method_name == "size") {
+                return makeNxTypeSimple(NXTYPE_INT)
+            }
+            if (expr.method_name == "contains" || expr.method_name == "containsKey") {
+                return makeNxTypeSimple(NXTYPE_BOOL)
+            }
+            if (expr.method_name == "get" || expr.method_name == "getInt") {
+                if (recvTy.val != null) {
+                    return recvTy.val!
+                }
+            }
+            return nxTypeUnknown()
+        }
+        if (recvTy.kind == NXTYPE_INT || recvTy.kind == NXTYPE_LONG ||
+            recvTy.kind == NXTYPE_BOOL || recvTy.kind == NXTYPE_CHAR) {
+            return makeNxTypeSimple(NXTYPE_STRING)
+        }
+        if (recvTy.kind == NXTYPE_NAMED) {
+            var fi = this.ctx.findMethod(recvTy.name, expr.method_name)
+            if (fi != null) {
+                if (fi!.return_type != null) {
+                    return fi!.return_type!
+                }
+            }
+        }
+        return nxTypeUnknown()
+    }
+
+    getArgStr(args: List, idx: Int): String {
+        if (idx >= args.len()) {
+            return ""
+        }
+        var arg: CallArg = args.get(idx)
+        if (arg.val != null) {
+            return this.genExpr(arg.val!, null)
+        }
+        return ""
+    }
+
+    getArgType(args: List, idx: Int): NxType {
+        if (idx >= args.len()) {
+            return nxTypeUnknown()
+        }
+        var arg: CallArg = args.get(idx)
+        if (arg.val != null) {
+            return this.inferExprType(arg.val!)
+        }
+        return nxTypeUnknown()
+    }
+
+    coerceToString(expr: Expr, ty: NxType): String {
+        var val = this.genExpr(expr, null)
+        if (ty.kind == NXTYPE_STRING) {
+            return val
+        }
+        if (ty.kind == NXTYPE_INT || ty.kind == NXTYPE_LONG) {
+            return "nx_int_to_string(" + val + ")"
+        }
+        if (ty.kind == NXTYPE_BOOL) {
+            return "nx_bool_to_string(" + val + ")"
+        }
+        if (ty.kind == NXTYPE_CHAR) {
+            return "nx_char_to_string(" + val + ")"
+        }
+        return val
+    }
+
+    genExpr(expr: Expr, hint: NxType?): String {
+        if (expr.kind == EXPR_INT) {
+            return "((NxInt)" + expr.int_val.toString() + "LL)"
+        }
+        if (expr.kind == EXPR_FLOAT) {
+            return "((double)" + expr.float_val + ")"
+        }
+        if (expr.kind == EXPR_STRING) {
+            return "\"" + escapeString(expr.str_val) + "\""
+        }
+        if (expr.kind == EXPR_CHAR) {
+            return "((NxChar)'" + escapeChar(expr.char_val) + "')"
+        }
+        if (expr.kind == EXPR_BOOL) {
+            if (expr.bool_val) {
+                return "NX_TRUE"
+            }
+            return "NX_FALSE"
+        }
+        if (expr.kind == EXPR_NULL) {
+            return "NULL"
+        }
+        if (expr.kind == EXPR_THIS) {
+            return "this"
+        }
+        if (expr.kind == EXPR_PATH) {
+            var parts: List = expr.path_parts
+            if (parts.len() == 1) {
+                var name: String = parts.get(0)
+                return name
+            }
+            var result = ""
+            var i = 0
+            while (i < parts.len()) {
+                if (i > 0) {
+                    result = result + "_"
+                }
+                var p: String = parts.get(i)
+                result = result + p
+                i = i + 1
+            }
+            return result
+        }
+        if (expr.kind == EXPR_UNARY) {
+            var inner = this.genExpr(expr.left!, null)
+            if (expr.op == OP_NEG) {
+                return "(-" + inner + ")"
+            }
+            return "(!" + inner + ")"
+        }
+        if (expr.kind == EXPR_BINARY) {
+            return this.genBinaryExpr(expr)
+        }
+        if (expr.kind == EXPR_CALL) {
+            var callTy = this.inferCallType(expr)
+            var raw = this.genCallExpr(expr)
+            if (callTy.kind == NXTYPE_NAMED) {
+                return this.voidCastOut(callTy, raw)
+            }
+            return raw
+        }
+        if (expr.kind == EXPR_METHOD) {
+            return this.genMethodCallExpr(expr, false, hint)
+        }
+        if (expr.kind == EXPR_FIELD) {
+            var recvTy = this.inferExprType(expr.receiver!)
+            if (recvTy.kind == NXTYPE_STRING && expr.field_name == "length") {
+                var recv = this.genExpr(expr.receiver!, null)
+                return "nx_string_len(" + recv + ")"
+            }
+            var recv2 = this.genExpr(expr.receiver!, null)
+            return recv2 + "->" + expr.field_name
+        }
+        if (expr.kind == EXPR_INDEX) {
+            var base = this.genExpr(expr.left!, null)
+            var idx = this.genExpr(expr.right!, null)
+            var elemTy = nxTypeUnknown()
+            var baseTy = this.inferExprType(expr.left!)
+            if (baseTy.kind == NXTYPE_LIST && baseTy.elem != null) {
+                elemTy = baseTy.elem!
+            }
+            if (elemTy.kind == NXTYPE_UNKNOWN && hint != null) {
+                elemTy = hint!
+            }
+            return this.voidCastOut(elemTy, "nx_list_get(" + base + ", " + idx + ")")
+        }
+        if (expr.kind == EXPR_NULL_ASSERT) {
+            var inner2 = this.genExpr(expr.left!, null)
+            var cty = this.nxTypeToCType(this.inferExprType(expr.left!))
+            return "((" + inner2 + ") != NULL ? (" + inner2 + ") : (nx_panic(\"null assertion failed\"), (" + cty + ")NULL))"
+        }
+        if (expr.kind == EXPR_ELVIS) {
+            var l = this.genExpr(expr.left!, null)
+            var r = this.genExpr(expr.right!, null)
+            return "((" + l + ") != NULL ? (" + l + ") : (" + r + "))"
+        }
+        if (expr.kind == EXPR_LAMBDA) {
+            return "NULL"
+        }
+        if (expr.kind == EXPR_LIST) {
+            var tmp = this.freshTmp()
+            this.emitLine("NxList* " + tmp + " = nx_list_new();")
+            var i2 = 0
+            while (i2 < expr.elems.len()) {
+                var e: Expr = expr.elems.get(i2)
+                var ety = this.inferExprType(e)
+                var eval = this.genExpr(e, null)
+                var cast = this.voidCastIn(ety, eval)
+                this.emitLine("nx_list_push(" + tmp + ", " + cast + ");")
+                i2 = i2 + 1
+            }
+            return tmp
+        }
+        if (expr.kind == EXPR_SWITCH) {
+            var tmp2 = this.freshTmp()
+            this.emitLine("void* " + tmp2 + ";")
+            if (expr.args.len() > 0) {
+                var swStmt: Stmt = expr.args.get(0)
+                this.genStmt(swStmt)
+            }
+            return tmp2
+        }
+        return "NULL"
+    }
+
+    genBinaryExpr(expr: Expr): String {
+        if (expr.op == OP_ADD) {
+            var lt = this.inferExprType(expr.left!)
+            var rt = this.inferExprType(expr.right!)
+            if (lt.kind == NXTYPE_STRING || rt.kind == NXTYPE_STRING) {
+                var ls = this.coerceToString(expr.left!, lt)
+                var rs = this.coerceToString(expr.right!, rt)
+                return "nx_string_concat(" + ls + ", " + rs + ")"
+            }
+        }
+        if (expr.op == OP_EQ || expr.op == OP_NE) {
+            var lt2 = this.inferExprType(expr.left!)
+            if (lt2.kind == NXTYPE_STRING) {
+                var lv = this.genExpr(expr.left!, null)
+                var rv = this.genExpr(expr.right!, null)
+                if (expr.op == OP_EQ) {
+                    return "nx_string_equals(" + lv + ", " + rv + ")"
+                }
+                return "(!nx_string_equals(" + lv + ", " + rv + "))"
+            }
+        }
+        var l = this.genExpr(expr.left!, null)
+        var r = this.genExpr(expr.right!, null)
+        var opStr = ""
+        if (expr.op == OP_ADD) {
+            opStr = "+"
+        }
+        if (expr.op == OP_SUB) {
+            opStr = "-"
+        }
+        if (expr.op == OP_MUL) {
+            opStr = "*"
+        }
+        if (expr.op == OP_DIV) {
+            opStr = "/"
+        }
+        if (expr.op == OP_MOD) {
+            opStr = "%"
+        }
+        if (expr.op == OP_EQ) {
+            opStr = "=="
+        }
+        if (expr.op == OP_NE) {
+            opStr = "!="
+        }
+        if (expr.op == OP_LT) {
+            opStr = "<"
+        }
+        if (expr.op == OP_LE) {
+            opStr = "<="
+        }
+        if (expr.op == OP_GT) {
+            opStr = ">"
+        }
+        if (expr.op == OP_GE) {
+            opStr = ">="
+        }
+        if (expr.op == OP_AND) {
+            opStr = "&&"
+        }
+        if (expr.op == OP_OR) {
+            opStr = "||"
+        }
+        return "(" + l + " " + opStr + " " + r + ")"
+    }
+
+    genCallExpr(expr: Expr): String {
+        var callee: Expr = expr.callee!
+        if (callee.kind == EXPR_PATH) {
+            var parts: List = callee.path_parts
+            if (parts.len() == 2) {
+                var mod: String = parts.get(0)
+                var fn: String = parts.get(1)
+                if (mod == "io") {
+                    return this.genIoCall(fn, expr.args)
+                }
+                if (this.ctx.hasImport(mod)) {
+                    var modArgs = this.genArgsList(expr.args)
+                    return "nx_fn_" + fn + "(" + modArgs + ")"
+                }
+            }
+            if (parts.len() == 1) {
+                var name: String = parts.get(0)
+                if (name == "io") {
+                    return "0"
+                }
+                if (name == "List") {
+                    return "nx_list_new()"
+                }
+                if (name == "Map") {
+                    return "nx_map_new()"
+                }
+                if (name == "nx_get_arg_count" || name == "nx_get_arg" || name == "nx_exit" ||
+                    name == "nx_list_dir" || name == "nx_compile_c" || name == "nx_write_file" ||
+                    name == "nx_string_ends_with" || name == "nx_string_lt" ||
+                    name == "nx_run_capture" || name == "nx_run_binary_capture" ||
+                    name == "nx_read_header_line" || name == "nx_read_stdin_n" || name == "nx_write_stdout_n" ||
+                    name == "nx_map_keys" || name == "nx_string_char_at" || name == "nx_string_substring" ||
+                    name == "nx_tcp_listen" || name == "nx_tcp_accept" ||
+                    name == "nx_tcp_read_line" || name == "nx_tcp_read" || name == "nx_tcp_write" ||
+                    name == "nx_tcp_close" || name == "nx_tcp_connect" ||
+                    name == "nx_file_exists" || name == "nx_mkdir" || name == "nx_delete" ||
+                    name == "nx_rename" || name == "nx_stat_size" || name == "nx_stat_is_dir" ||
+                    name == "nx_fopen" || name == "nx_fclose" || name == "nx_fread_n" ||
+                    name == "nx_fwrite_n" || name == "nx_getenv" || name == "nx_time_now" ||
+                    name == "nx_try_push" || name == "nx_try_pop" || name == "nx_throw" ||
+                    name == "nx_string_len" || name == "nx_string_contains" ||
+                    name == "nx_system_compile" || name == "parseDirNx") {
+                    var builtinArgs = this.genArgsList(expr.args)
+                    if (name == "nx_system_compile") {
+                        return "nx_compile_c(" + builtinArgs + ")"
+                    }
+                    if (name == "parseDirNx") {
+                        return "nx_fn_parseDirNx(" + builtinArgs + ")"
+                    }
+                    return name + "(" + builtinArgs + ")"
+                }
+                var si = this.ctx.findStruct(name)
+                if (si != null) {
+                    return this.genStructCtor(name, si!, expr.args)
+                }
+                var fnName = "nx_fn_" + name
+                var argsStr = this.genArgsList(expr.args)
+                return fnName + "(" + argsStr + ")"
+            }
+        }
+        if (callee.kind == EXPR_FIELD) {
+            var recv = this.genExpr(callee.receiver!, null)
+            var field = callee.field_name
+            if (callee.receiver != null) {
+                if (callee.receiver!.kind == EXPR_PATH) {
+                    var modParts: List = callee.receiver!.path_parts
+                    if (modParts.len() == 1) {
+                        var modName: String = modParts.get(0)
+                        var modVarTy = this.getVarType(modName)
+                        if (modVarTy.kind == NXTYPE_UNKNOWN) {
+                            var modG = this.ctx.findGlobal(modName)
+                            if (modG == null && this.ctx.findStruct(modName) == null &&
+                                this.ctx.hasImport(modName)) {
+                                var importArgs = this.genArgsList(expr.args)
+                                return "nx_fn_" + field + "(" + importArgs + ")"
+                            }
+                        }
+                    }
+                }
+                var recvTy = this.inferExprType(callee.receiver!)
+                if (recvTy.kind == NXTYPE_NAMED) {
+                    var argsStr2 = recv
+                    var i = 0
+                    while (i < expr.args.len()) {
+                        var arg: CallArg = expr.args.get(i)
+                        if (arg.val != null) {
+                            argsStr2 = argsStr2 + ", " + this.genExpr(arg.val!, null)
+                        }
+                        i = i + 1
+                    }
+                    return "nx_method_" + recvTy.name + "_" + field + "(" + argsStr2 + ")"
+                }
+            }
+        }
+        var calleeStr = this.genExpr(callee, null)
+        var argsStr3 = this.genArgsList(expr.args)
+        return calleeStr + "(" + argsStr3 + ")"
+    }
+
+    genArgsList(args: List): String {
+        var result = ""
+        var i = 0
+        while (i < args.len()) {
+            var arg: CallArg = args.get(i)
+            if (i > 0) {
+                result = result + ", "
+            }
+            if (arg.val != null) {
+                result = result + this.genExpr(arg.val!, null)
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    genStructCtor(typeName: String, si: StructInfo, args: List): String {
+        var tmp = this.freshTmp()
+        this.emitLine("NxStruct_" + typeName + "* " + tmp + " = GC_MALLOC(sizeof(NxStruct_" + typeName + "));")
+        var namedArgs: List = List()
+        var posArgs: List = List()
+        var i = 0
+        while (i < args.len()) {
+            var arg: CallArg = args.get(i)
+            if (arg.kind == CALL_NAMED) {
+                namedArgs.push(arg)
+            } else {
+                posArgs.push(arg)
+            }
+            i = i + 1
+        }
+        if (namedArgs.len() > 0) {
+            var j = 0
+            while (j < namedArgs.len()) {
+                var arg2: CallArg = namedArgs.get(j)
+                var fval = ""
+                if (arg2.val != null) {
+                    fval = this.genExpr(arg2.val!, null)
+                }
+                this.emitLine(tmp + "->" + arg2.label + " = " + fval + ";")
+                j = j + 1
+            }
+        } else {
+            var sortedFields = sortStructFields(si.fields)
+            var k = 0
+            while (k < sortedFields.len()) {
+                var sf: StructField = sortedFields.get(k)
+                if (k < posArgs.len()) {
+                    var arg3: CallArg = posArgs.get(k)
+                    var fval2 = ""
+                    if (arg3.val != null) {
+                        fval2 = this.genExpr(arg3.val!, null)
+                    }
+                    this.emitLine(tmp + "->" + sf.name + " = " + fval2 + ";")
+                }
+                k = k + 1
+            }
+        }
+        this.setVarType(tmp, makeNxTypeNamed(typeName))
+        return tmp
+    }
+
+    genIoCall(method: String, args: List): String {
+        if (method == "println") {
+            if (args.len() == 1) {
+                var arg: CallArg = args.get(0)
+                if (arg.val != null) {
+                    var argTy = this.inferExprType(arg.val!)
+                    var argStr = this.genExpr(arg.val!, null)
+                    if (argTy.kind == NXTYPE_INT || argTy.kind == NXTYPE_LONG) {
+                        return "nx_println_int(" + argStr + ")"
+                    }
+                    if (argTy.kind == NXTYPE_BOOL) {
+                        return "nx_println_bool(" + argStr + ")"
+                    }
+                    if (argTy.kind == NXTYPE_CHAR) {
+                        return "nx_println_char(" + argStr + ")"
+                    }
+                    return "nx_println_string(" + argStr + ")"
+                }
+            }
+            return "nx_println_string(\"\")"
+        }
+        if (method == "print") {
+            if (args.len() == 1) {
+                var arg2: CallArg = args.get(0)
+                if (arg2.val != null) {
+                    var argTy2 = this.inferExprType(arg2.val!)
+                    var argStr2 = this.genExpr(arg2.val!, null)
+                    if (argTy2.kind == NXTYPE_INT || argTy2.kind == NXTYPE_LONG) {
+                        return "nx_print_int(" + argStr2 + ")"
+                    }
+                    return "nx_print_string(" + argStr2 + ")"
+                }
+            }
+            return "0"
+        }
+        if (method == "readLine") {
+            return "nx_read_line()"
+        }
+        if (method == "readFile") {
+            var pathStr = this.getArgStr(args, 0)
+            return "nx_read_file(" + pathStr + ")"
+        }
+        if (method == "writeFile") {
+            var pathStr2 = this.getArgStr(args, 0)
+            var contStr = this.getArgStr(args, 1)
+            return "nx_write_file(" + pathStr2 + ", " + contStr + ")"
+        }
+        return "nx_fn_io_" + method + "()"
+    }
+
+    genMethodCallExpr(expr: Expr, safe: Bool, hint: NxType?): String {
+        if (expr.receiver != null) {
+            if (expr.receiver!.kind == EXPR_PATH) {
+                var parts: List = expr.receiver!.path_parts
+                if (parts.len() == 1) {
+                    var pname: String = parts.get(0)
+                    if (pname == "io") {
+                        return this.genIoCall(expr.method_name, expr.args)
+                    }
+                    var varTy = this.getVarType(pname)
+                    if (varTy.kind == NXTYPE_UNKNOWN) {
+                        var g = this.ctx.findGlobal(pname)
+                        if (g == null && this.ctx.findStruct(pname) == null && this.ctx.hasImport(pname)) {
+                            var modArgs = this.genArgsList(expr.args)
+                            return "nx_fn_" + expr.method_name + "(" + modArgs + ")"
+                        }
+                    }
+                }
+            }
+        }
+        var recvTy = this.inferExprType(expr.receiver!)
+        var recv = this.genExpr(expr.receiver!, null)
+        if (recvTy.kind == NXTYPE_STRING) {
+            return this.genStringMethod(recv, expr.method_name, expr.args)
+        }
+        if (recvTy.kind == NXTYPE_LIST) {
+            return this.genListMethod(recv, recvTy, expr.method_name, expr.args, hint)
+        }
+        if (recvTy.kind == NXTYPE_MAP) {
+            return this.genMapMethod(recv, recvTy, expr.method_name, expr.args)
+        }
+        if (recvTy.kind == NXTYPE_INT || recvTy.kind == NXTYPE_LONG) {
+            if (expr.method_name == "toString") {
+                return "nx_int_to_string(" + recv + ")"
+            }
+        }
+        if (recvTy.kind == NXTYPE_BOOL) {
+            if (expr.method_name == "toString") {
+                return "nx_bool_to_string(" + recv + ")"
+            }
+        }
+        if (recvTy.kind == NXTYPE_CHAR) {
+            if (expr.method_name == "toString") {
+                return "nx_char_to_string(" + recv + ")"
+            }
+        }
+        var typeName = ""
+        if (recvTy.kind == NXTYPE_NAMED) {
+            typeName = recvTy.name
+        }
+        if (recvTy.kind == NXTYPE_NULLABLE && recvTy.elem != null) {
+            if (recvTy.elem!.kind == NXTYPE_NAMED) {
+                typeName = recvTy.elem!.name
+            }
+        }
+        if (typeName != "") {
+            var allArgs = recv
+            var i = 0
+            while (i < expr.args.len()) {
+                var arg: CallArg = expr.args.get(i)
+                if (arg.val != null) {
+                    allArgs = allArgs + ", " + this.genExpr(arg.val!, null)
+                }
+                i = i + 1
+            }
+            return "nx_method_" + typeName + "_" + expr.method_name + " (" + allArgs + ")"
+        }
+        var argsStr = recv
+        var i2 = 0
+        while (i2 < expr.args.len()) {
+            var arg2: CallArg = expr.args.get(i2)
+            if (arg2.val != null) {
+                argsStr = argsStr + ", " + this.genExpr(arg2.val!, null)
+            }
+            i2 = i2 + 1
+        }
+        return "nx_method_void_" + expr.method_name + "(" + argsStr + ")"
+    }
+
+    genStringMethod(recv: String, method: String, args: List): String {
+        if (method == "length") {
+            return "nx_string_len(" + recv + ")"
+        }
+        if (method == "charAt") {
+            var idx = this.getArgStr(args, 0)
+            return "nx_string_char_at(" + recv + ", " + idx + ")"
+        }
+        if (method == "toInt") {
+            return "nx_string_to_int(" + recv + ")"
+        }
+        if (method == "equals") {
+            var other = this.getArgStr(args, 0)
+            return "nx_string_equals(" + recv + ", " + other + ")"
+        }
+        if (method == "concat") {
+            var other2 = this.getArgStr(args, 0)
+            return "nx_string_concat(" + recv + ", " + other2 + ")"
+        }
+        if (method == "substring") {
+            var start = this.getArgStr(args, 0)
+            var end = this.getArgStr(args, 1)
+            return "nx_string_substring(" + recv + ", " + start + ", " + end + ")"
+        }
+        if (method == "startsWith") {
+            var prefix = this.getArgStr(args, 0)
+            return "nx_string_starts_with(" + recv + ", " + prefix + ")"
+        }
+        if (method == "endsWith") {
+            var suffix = this.getArgStr(args, 0)
+            return "nx_string_ends_with(" + recv + ", " + suffix + ")"
+        }
+        if (method == "contains") {
+            var sub = this.getArgStr(args, 0)
+            return "nx_string_contains(" + recv + ", " + sub + ")"
+        }
+        if (method == "toString") {
+            return recv
+        }
+        return "nx_string_" + method + "(" + recv + ")"
+    }
+
+    genListMethod(recv: String, listTy: NxType, method: String, args: List, hint: NxType?): String {
+        var elemTy = nxTypeUnknown()
+        if (listTy.elem != null) {
+            elemTy = listTy.elem!
+        }
+        if (method == "len" || method == "size") {
+            return "nx_list_len(" + recv + ")"
+        }
+        if (method == "isEmpty") {
+            return "(nx_list_len(" + recv + ") == 0)"
+        }
+        if (method == "push" || method == "add") {
+            var val = this.getArgStr(args, 0)
+            var argTy = this.getArgType(args, 0)
+            var cast = this.voidCastIn(argTy, val)
+            return "nx_list_push(" + recv + ", " + cast + ")"
+        }
+        if (method == "get") {
+            var idx = this.getArgStr(args, 0)
+            var outTy = elemTy
+            if (outTy.kind == NXTYPE_UNKNOWN && hint != null) {
+                outTy = hint!
+            }
+            return this.voidCastOut(outTy, "nx_list_get(" + recv + ", " + idx + ")")
+        }
+        if (method == "set") {
+            var idx2 = this.getArgStr(args, 0)
+            var val2 = this.getArgStr(args, 1)
+            var argTy2 = this.getArgType(args, 1)
+            var cast2 = this.voidCastIn(argTy2, val2)
+            return "nx_list_set(" + recv + ", " + idx2 + ", " + cast2 + ")"
+        }
+        return "nx_list_" + method + "(" + recv + ")"
+    }
+
+    genMapMethod(recv: String, mapTy: NxType, method: String, args: List): String {
+        var valTy = nxTypeUnknown()
+        if (mapTy.val != null) {
+            valTy = mapTy.val!
+        }
+        if (method == "len" || method == "size") {
+            return "nx_map_len(" + recv + ")"
+        }
+        if (method == "contains" || method == "containsKey") {
+            var key = this.getArgStr(args, 0)
+            return "nx_map_contains(" + recv + ", " + key + ")"
+        }
+        if (method == "get") {
+            var key2 = this.getArgStr(args, 0)
+            return this.voidCastOut(valTy, "nx_map_get(" + recv + ", " + key2 + ")")
+        }
+        if (method == "getInt") {
+            var key3 = this.getArgStr(args, 0)
+            return "(NxInt)(intptr_t)nx_map_get(" + recv + ", " + key3 + ")"
+        }
+        if (method == "insert" || method == "put") {
+            var key4 = this.getArgStr(args, 0)
+            var val3 = this.getArgStr(args, 1)
+            var argTy3 = this.getArgType(args, 1)
+            var cast3 = this.voidCastIn(argTy3, val3)
+            return "nx_map_insert(" + recv + ", " + key4 + ", " + cast3 + ")"
+        }
+        return "nx_map_" + method + "(" + recv + ")"
+    }
+}
+
+escapeString(s: String): String {
+    var result = ""
+    var i = 0
+    while (i < s.length()) {
+        var c = s.charAt(i)
+        if (c == '"') {
+            result = result + "\\\""
+        } else if (c == '\\') {
+            result = result + "\\\\"
+        } else if (c == '\n') {
+            result = result + "\\n"
+        } else if (c == '\t') {
+            result = result + "\\t"
+        } else if (c == '\r') {
+            result = result + "\\r"
+        } else {
+            result = result + c.toString()
+        }
+        i = i + 1
+    }
+    return result
+}
+
+escapeChar(s: String): String {
+    if (s == "\n") {
+        return "\\n"
+    }
+    if (s == "\t") {
+        return "\\t"
+    }
+    if (s == "\r") {
+        return "\\r"
+    }
+    if (s.length() == 0) {
+        return "\\0"
+    }
+    if (s == "\\") {
+        return "\\\\"
+    }
+    if (s == "'") {
+        return "\\'"
+    }
+    return s
+}
+
+sortList(lst: List): List {
+    var n = lst.len()
+    var sorted: List = List()
+    var i = 0
+    while (i < n) {
+        var item: String = lst.get(i)
+        sorted.push(item)
+        i = i + 1
+    }
+    var i2 = 0
+    while (i2 < n) {
+        var j = i2 + 1
+        while (j < n) {
+            var a: String = sorted.get(i2)
+            var b: String = sorted.get(j)
+            if (nx_string_lt(b, a)) {
+                sorted.set(i2, b)
+                sorted.set(j, a)
+            }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+    return sorted
+}
+
+sortStructFields(fields: List): List {
+    var n = fields.len()
+    var sorted: List = List()
+    var i = 0
+    while (i < n) {
+        var sf: StructField = fields.get(i)
+        sorted.push(sf)
+        i = i + 1
+    }
+    var i2 = 0
+    while (i2 < n) {
+        var j = i2 + 1
+        while (j < n) {
+            var a: StructField = sorted.get(i2)
+            var b: StructField = sorted.get(j)
+            if (nx_string_lt(b.name, a.name)) {
+                sorted.set(i2, b)
+                sorted.set(j, a)
+            }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+    return sorted
+}
+
+makeCGen(ctx: SemaCtx): CGen {
+    return CGen(
+        ctx: ctx,
+        out: "",
+        indent: 0,
+        tmp_counter: 0,
+        current_class: "",
+        var_type_names: List(),
+        var_type_vals: List()
+    )
+}
+
+generateC(prog: Program, ctx: SemaCtx): String {
+    var gen = makeCGen(ctx)
+    return gen.generate(prog)
+}

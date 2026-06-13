@@ -1,0 +1,209 @@
+import std.io
+import std.core.math
+import std.core.random
+import std.core.strings
+import std.core.string_builder
+import std.core.integer
+import std.core.boolean
+import std.core.uuid
+import std.collections.array_list
+import std.collections.stack
+import std.collections.queue
+import std.collections.hash_set
+import std.collections.linked_hash_map
+import std.collections.linked_hash_set
+import std.collections.tree_map
+import std.collections.tree_set
+import std.collections.optional
+
+checkBool(name: String, got: Bool, expected: Bool): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+checkInt(name: String, got: Int, expected: Int): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+checkString(name: String, got: String, expected: String): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+main(): Void {
+    var allPass = true
+    if (!checkInt("math_abs", math.absInt(-7), 7)) {
+        allPass = false
+    }
+    if (!checkInt("math_min", math.minInt(3, 9), 3)) {
+        allPass = false
+    }
+    if (!checkInt("math_max", math.maxInt(3, 9), 9)) {
+        allPass = false
+    }
+    if (!checkInt("math_pow", math.powInt(2, 4), 16)) {
+        allPass = false
+    }
+    if (!checkString("strings_trim", strings.trimString("  hi  "), "hi")) {
+        allPass = false
+    }
+    if (!checkString("strings_upper", strings.toUpperCaseString("abc"), "ABC")) {
+        allPass = false
+    }
+    if (!checkString("strings_lower", strings.toLowerCaseString("AbC"), "abc")) {
+        allPass = false
+    }
+    if (!checkString("strings_replace", strings.replaceString("a-b-a", "a", "z"), "z-b-z")) {
+        allPass = false
+    }
+    var splitParts: List = strings.splitString("a,b,c", ",")
+    if (!checkInt("strings_split_len", splitParts.len(), 3)) {
+        allPass = false
+    }
+    if (!checkString("strings_split_first", splitParts.get(0), "a")) {
+        allPass = false
+    }
+    if (!checkInt("integer_parse", integer.parseInt("42"), 42)) {
+        allPass = false
+    }
+    if (!checkString("integer_format", integer.formatInt(7), "7")) {
+        allPass = false
+    }
+    if (!checkBool("boolean_parse_true", boolean.parseBool("true"), true)) {
+        allPass = false
+    }
+    if (!checkBool("boolean_parse_false", boolean.parseBool("false"), false)) {
+        allPass = false
+    }
+    if (!checkString("boolean_format", boolean.formatBool(true), "true")) {
+        allPass = false
+    }
+    var builder = StringBuilder(parts: List())
+    builder.append("ab")
+    builder.append("cd")
+    if (!checkString("string_builder", builder.toString(), "abcd")) {
+        allPass = false
+    }
+    var rng = Random(seed: 12345)
+    var bounded = rng.nextIntBounded(100)
+    if (!checkBool("random_bounded", bounded >= 0 && bounded < 100, true)) {
+        allPass = false
+    }
+    var id = randomUuid(Random(seed: 99))
+    if (!checkBool("uuid_len", id.length() == 19, true)) {
+        allPass = false
+    }
+    var list = ArrayList(elems: List())
+    list.add("x")
+    list.add("y")
+    if (!checkInt("array_list_size", list.size(), 2)) {
+        allPass = false
+    }
+    if (!checkString("array_list_get", list.get(1), "y")) {
+        allPass = false
+    }
+    var stack = Stack(elems: List(), count: 0)
+    stack.push("a")
+    stack.push("b")
+    if (!checkString("stack_pop", stack.pop(), "b")) {
+        allPass = false
+    }
+    if (!checkString("stack_peek", stack.peek(), "a")) {
+        allPass = false
+    }
+    var queue = Queue(elems: List(), head: 0)
+    queue.enqueue("first")
+    queue.enqueue("second")
+    if (!checkString("queue_dequeue", queue.dequeue(), "first")) {
+        allPass = false
+    }
+    if (!checkString("queue_peek", queue.peek(), "second")) {
+        allPass = false
+    }
+    var set = HashSet(keys: Map())
+    set.add("k1")
+    if (!checkBool("hash_set_contains", set.contains("k1"), true)) {
+        allPass = false
+    }
+    if (!checkBool("hash_set_missing", set.contains("k2"), false)) {
+        allPass = false
+    }
+    var opt = optionalOf("v")
+    if (!checkBool("optional_present", opt.isPresent(), true)) {
+        allPass = false
+    }
+    if (!checkString("optional_get", opt.get(), "v")) {
+        allPass = false
+    }
+    var empty = optionalEmpty()
+    if (!checkString("optional_or_else", empty.orElse("d"), "d")) {
+        allPass = false
+    }
+    var lhm = LinkedHashMap(order: List(), entries: Map())
+    lhm.put("b", "2")
+    lhm.put("a", "1")
+    lhm.put("c", "3")
+    if (!checkString("linked_hash_map_order0", lhm.keyAt(0), "b")) {
+        allPass = false
+    }
+    if (!checkString("linked_hash_map_order2", lhm.keyAt(2), "c")) {
+        allPass = false
+    }
+    if (!checkString("linked_hash_map_get", lhm.get("a")!, "1")) {
+        allPass = false
+    }
+    var lhs = LinkedHashSet(order: List(), members: Map())
+    lhs.add("y")
+    lhs.add("x")
+    if (!checkString("linked_hash_set_order0", lhs.keyAt(0), "y")) {
+        allPass = false
+    }
+    if (!checkString("linked_hash_set_order1", lhs.keyAt(1), "x")) {
+        allPass = false
+    }
+    var tm = TreeMap(sortedKeys: List(), entries: Map())
+    tm.put("c", "3")
+    tm.put("a", "1")
+    tm.put("b", "2")
+    if (!checkString("tree_map_order0", tm.keyAt(0), "a")) {
+        allPass = false
+    }
+    if (!checkString("tree_map_order2", tm.keyAt(2), "c")) {
+        allPass = false
+    }
+    if (!checkString("tree_map_get", tm.get("b")!, "2")) {
+        allPass = false
+    }
+    var ts = TreeSet(sortedKeys: List(), members: Map())
+    ts.add("c")
+    ts.add("a")
+    ts.add("b")
+    if (!checkString("tree_set_order0", ts.keyAt(0), "a")) {
+        allPass = false
+    }
+    if (!checkString("tree_set_order2", ts.keyAt(2), "c")) {
+        allPass = false
+    }
+    if (!checkBool("tree_set_contains", ts.contains("b"), true)) {
+        allPass = false
+    }
+    if (allPass) {
+        io.println("Todos los tests std pasaron.")
+    } else {
+        io.println("Algunos tests std fallaron.")
+        nx_exit(1)
+    }
+}

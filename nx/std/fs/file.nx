@@ -1,0 +1,14 @@
+class File(path: String) {
+
+    exists(): Bool {
+        return nx_file_exists(this.path)
+    }
+
+    size(): Int {
+        return nx_stat_size(this.path)
+    }
+
+    isDirectory(): Bool {
+        return nx_stat_is_dir(this.path)
+    }
+}

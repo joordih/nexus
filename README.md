@@ -54,6 +54,13 @@ main(): Void {
 
 Requirements: Rust stable, clang, Boehm GC (`libgc`), make.
 
+Optional environment variables for linking tests and compiled programs:
+
+- `CC`: C compiler (default `clang`)
+- `GC_INCLUDE`: Boehm GC include directory
+- `GC_LIB`: Boehm GC library directory
+- `GC_STATIC`: set to `1` for static GC linkage (default on Windows)
+
 ```
 make bootstrap      # build Stage 0 compiler -> build/nxc-stage0
 make test           # run all test suites
@@ -68,18 +75,17 @@ make test-e2e       # end-to-end suite (requires clang + libgc)
 
 ```
 bootstrap/      Stage 0 compiler in Rust (nxc-stage0)
-compiler/       Stage 1 compiler in Nexus (nxc-stage1, future)
+compiler/       Self-hosted compiler in Nexus (nxc-stage1+)
+nx/             Nexus source outside the compiler (stdlib, LSP)
 runtime/        C runtime (GC, List, Map, io)
-std/            Standard library in Nexus (future)
 tests/          Test suites with expected snapshots
 examples/       Example programs
-PLAN.md         Phased build plan
-SPEC.md         Language specification (Core subset)
-GRAMMAR.md      Formal grammar (Core subset)
-RULES.md        Code and process rules
-NOTES.md        Development log
+docs/           Spec, grammar, architecture, rules, notes
+vscode-nexus/   VS Code extension
 ```
 
 ## Language specification
 
-The full language specification is in `SPEC.md`. The formal grammar is in `GRAMMAR.md`. Both documents describe only what the compiler currently implements; they grow with each phase.
+The full language specification is in `docs/SPEC.md`. The formal grammar is in `docs/GRAMMAR.md`. Both documents describe only what the compiler currently implements; they grow with each phase.
+
+Other documentation: `docs/PLAN.md` (architecture and roadmap), `docs/RULES.md`, `docs/NOTES.md`, `docs/LSP-STDLIB-PLAN.md`.

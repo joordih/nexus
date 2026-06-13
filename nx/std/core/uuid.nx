@@ -1,0 +1,47 @@
+import std.core.random
+
+final UUID_SEGMENT_LEN: Int = 4
+final UUID_SEGMENT_COUNT: Int = 4
+
+hexDigit(n: Int): Char {
+    if (n == 0) { return '0' }
+    if (n == 1) { return '1' }
+    if (n == 2) { return '2' }
+    if (n == 3) { return '3' }
+    if (n == 4) { return '4' }
+    if (n == 5) { return '5' }
+    if (n == 6) { return '6' }
+    if (n == 7) { return '7' }
+    if (n == 8) { return '8' }
+    if (n == 9) { return '9' }
+    if (n == 10) { return 'a' }
+    if (n == 11) { return 'b' }
+    if (n == 12) { return 'c' }
+    if (n == 13) { return 'd' }
+    if (n == 14) { return 'e' }
+    return 'f'
+}
+
+randomHexSegment(rng: Random, len: Int): String {
+    var result = ""
+    var i = 0
+    while (i < len) {
+        var digit = rng.nextIntBounded(16)
+        result = result + hexDigit(digit).toString()
+        i = i + 1
+    }
+    return result
+}
+
+randomUuid(rng: Random): String {
+    var result = ""
+    var seg = 0
+    while (seg < UUID_SEGMENT_COUNT) {
+        if (seg > 0) {
+            result = result + "-"
+        }
+        result = result + randomHexSegment(rng, UUID_SEGMENT_LEN)
+        seg = seg + 1
+    }
+    return result
+}

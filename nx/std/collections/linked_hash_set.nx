@@ -1,0 +1,26 @@
+class LinkedHashSet(order: List, members: Map) {
+
+    size(): Int {
+        return this.order.len()
+    }
+
+    isEmpty(): Bool {
+        return this.order.len() == 0
+    }
+
+    add(key: String): Void {
+        if (this.members.contains(key)) {
+            return
+        }
+        this.order.push(key)
+        this.members.insert(key, true)
+    }
+
+    contains(key: String): Bool {
+        return this.members.contains(key)
+    }
+
+    keyAt(index: Int): String {
+        return this.order.get(index)
+    }
+}

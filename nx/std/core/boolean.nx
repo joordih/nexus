@@ -1,0 +1,13 @@
+parseBool(s: String): Bool {
+    if (s.equals("true")) {
+        return true
+    }
+    if (s.equals("false")) {
+        return false
+    }
+    return false
+}
+
+formatBool(b: Bool): String {
+    return b.toString()
+}

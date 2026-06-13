@@ -1,0 +1,29 @@
+class LinkedHashMap(order: List, entries: Map) {
+
+    size(): Int {
+        return this.entries.len()
+    }
+
+    isEmpty(): Bool {
+        return this.entries.len() == 0
+    }
+
+    put(key: String, payload: String): Void {
+        if (!this.entries.contains(key)) {
+            this.order.push(key)
+        }
+        this.entries.insert(key, payload)
+    }
+
+    get(key: String): String? {
+        return this.entries.get(key)
+    }
+
+    containsKey(key: String): Bool {
+        return this.entries.contains(key)
+    }
+
+    keyAt(index: Int): String {
+        return this.order.get(index)
+    }
+}

@@ -1,0 +1,309 @@
+import std.io
+
+final CHAR_NULL: Int = 0
+final HEX_BASE: Int = 16
+final JSON_PRINTABLE_ASCII: String = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+
+isJsonDigit(c: Char): Bool {
+    return c >= '0' && c <= '9'
+}
+
+isJsonHexDigit(c: Char): Bool {
+    return isJsonDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+hexValue(c: Char): Int {
+    if (c == '0') { return 0 }
+    if (c == '1') { return 1 }
+    if (c == '2') { return 2 }
+    if (c == '3') { return 3 }
+    if (c == '4') { return 4 }
+    if (c == '5') { return 5 }
+    if (c == '6') { return 6 }
+    if (c == '7') { return 7 }
+    if (c == '8') { return 8 }
+    if (c == '9') { return 9 }
+    if (c == 'a') { return 10 }
+    if (c == 'b') { return 11 }
+    if (c == 'c') { return 12 }
+    if (c == 'd') { return 13 }
+    if (c == 'e') { return 14 }
+    if (c == 'f') { return 15 }
+    if (c == 'A') { return 10 }
+    if (c == 'B') { return 11 }
+    if (c == 'C') { return 12 }
+    if (c == 'D') { return 13 }
+    if (c == 'E') { return 14 }
+    if (c == 'F') { return 15 }
+    return 0
+}
+
+asciiFromCode(code: Int): String {
+    if (code == 9) { return "\t" }
+    if (code == 10) { return "\n" }
+    if (code == 13) { return "\r" }
+    if (code >= 32 && code <= 126) {
+        var base = 32
+        var idx = code - base
+        return JSON_PRINTABLE_ASCII.substring(idx, idx + 1)
+    }
+    return "?"
+}
+
+class JSONParser(source: String, pos: Int) {
+
+    sourceLen(): Int {
+        return this.source.length()
+    }
+
+    peek(): Char {
+        if (this.pos >= this.sourceLen()) {
+            return '\0'
+        }
+        return nx_string_char_at(this.source, this.pos)
+    }
+
+    advance(): Char {
+        if (this.pos >= this.sourceLen()) {
+            return '\0'
+        }
+        var c = nx_string_char_at(this.source, this.pos)
+        this.pos = this.pos + 1
+        return c
+    }
+
+    isWhitespace(c: Char): Bool {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+    }
+
+    skipWhitespace(): Void {
+        var running = true
+        while (running) {
+            var c = this.peek()
+            if (this.isWhitespace(c)) {
+                this.advance()
+            } else {
+                running = false
+            }
+        }
+    }
+
+    matchLiteral(lit: String): Bool {
+        var i = 0
+        while (i < lit.length()) {
+            var expected = nx_string_char_at(lit, i)
+            var got = this.peek()
+            if (got != expected) {
+                return false
+            }
+            this.advance()
+            i = i + 1
+        }
+        return true
+    }
+
+    parse(): JSONValue {
+        this.skipWhitespace()
+        var val = this.parseValue()
+        this.skipWhitespace()
+        return val
+    }
+
+    parseValue(): JSONValue {
+        var c = this.peek()
+        if (c == 'n') {
+            if (this.matchLiteral("null")) {
+                return makeJsonNull()
+            }
+            io.println("json parse error: expected null")
+            return makeJsonNull()
+        }
+        if (c == 't') {
+            if (this.matchLiteral("true")) {
+                return makeJsonBool(true)
+            }
+            io.println("json parse error: expected true")
+            return makeJsonNull()
+        }
+        if (c == 'f') {
+            if (this.matchLiteral("false")) {
+                return makeJsonBool(false)
+            }
+            io.println("json parse error: expected false")
+            return makeJsonNull()
+        }
+        if (c == '"') {
+            return makeJsonString(this.parseString())
+        }
+        if (c == '[') {
+            return this.parseArray()
+        }
+        if (c == '{') {
+            return this.parseObject()
+        }
+        if (c == '-' || isJsonDigit(c)) {
+            return this.parseNumber()
+        }
+        io.println("json parse error: unexpected character")
+        return makeJsonNull()
+    }
+
+    parseString(): String {
+        this.advance()
+        var buf = ""
+        var running = true
+        while (running) {
+            var c = this.peek()
+            if (c == '"') {
+                this.advance()
+                running = false
+            } else if (c == '\\') {
+                this.advance()
+                var esc = this.advance()
+                if (esc == '"') {
+                    buf = buf + "\""
+                } else if (esc == '\\') {
+                    buf = buf + "\\"
+                } else if (esc == '/') {
+                    buf = buf + "/"
+                } else if (esc == 'n') {
+                    buf = buf + "\n"
+                } else if (esc == 'r') {
+                    buf = buf + "\r"
+                } else if (esc == 't') {
+                    buf = buf + "\t"
+                } else if (esc == 'u') {
+                    buf = buf + this.parseUnicodeEscape()
+                } else {
+                    buf = buf + esc.toString()
+                }
+            } else if (c == '\0') {
+                io.println("json parse error: unterminated string")
+                running = false
+            } else {
+                buf = buf + this.advance().toString()
+            }
+        }
+        return buf
+    }
+
+    parseUnicodeEscape(): String {
+        var i = 0
+        var code = 0
+        while (i < 4) {
+            var c = this.peek()
+            if (!isJsonHexDigit(c)) {
+                io.println("json parse error: invalid unicode escape")
+                return ""
+            }
+            code = code * HEX_BASE + hexValue(c)
+            this.advance()
+            i = i + 1
+        }
+        return asciiFromCode(code)
+    }
+
+    parseNumber(): JSONValue {
+        var start = this.pos
+        if (this.peek() == '-') {
+            this.advance()
+        }
+        while (isJsonDigit(this.peek())) {
+            this.advance()
+        }
+        var isFloat = false
+        if (this.peek() == '.') {
+            isFloat = true
+            this.advance()
+            while (isJsonDigit(this.peek())) {
+                this.advance()
+            }
+        }
+        var ec = this.peek()
+        if (ec == 'e' || ec == 'E') {
+            isFloat = true
+            this.advance()
+            var sign = this.peek()
+            if (sign == '+' || sign == '-') {
+                this.advance()
+            }
+            while (isJsonDigit(this.peek())) {
+                this.advance()
+            }
+        }
+        var text = nx_string_substring(this.source, start, this.pos)
+        if (isFloat) {
+            return makeJsonFloat(text)
+        }
+        return makeJsonInt(text.toInt())
+    }
+
+    parseArray(): JSONValue {
+        this.advance()
+        var elems: List = List()
+        this.skipWhitespace()
+        if (this.peek() == ']') {
+            this.advance()
+            return makeJsonArray(elems)
+        }
+        var running = true
+        while (running) {
+            var elem = this.parseValue()
+            elems.push(elem)
+            this.skipWhitespace()
+            var c = this.peek()
+            if (c == ',') {
+                this.advance()
+                this.skipWhitespace()
+            } else if (c == ']') {
+                this.advance()
+                running = false
+            } else {
+                io.println("json parse error: expected , or ] in array")
+                running = false
+            }
+        }
+        return makeJsonArray(elems)
+    }
+
+    parseObject(): JSONValue {
+        this.advance()
+        var m: Map = Map()
+        this.skipWhitespace()
+        if (this.peek() == '}') {
+            this.advance()
+            return makeJsonObject(m)
+        }
+        var running = true
+        while (running) {
+            this.skipWhitespace()
+            if (this.peek() != '"') {
+                io.println("json parse error: expected string key")
+                return makeJsonObject(m)
+            }
+            var key = this.parseString()
+            this.skipWhitespace()
+            if (this.peek() != ':') {
+                io.println("json parse error: expected :")
+                return makeJsonObject(m)
+            }
+            this.advance()
+            this.skipWhitespace()
+            var val = this.parseValue()
+            m.put(key, val)
+            this.skipWhitespace()
+            var c = this.peek()
+            if (c == ',') {
+                this.advance()
+                this.skipWhitespace()
+            } else if (c == '}') {
+                this.advance()
+                running = false
+            } else {
+                io.println("json parse error: expected , or } in object")
+                running = false
+            }
+        }
+        return makeJsonObject(m)
+    }
+}

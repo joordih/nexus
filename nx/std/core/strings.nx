@@ -1,0 +1,124 @@
+isWhitespaceChar(c: Char): Bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+trimString(s: String): String {
+    var start = 0
+    var end = s.length()
+    while (start < end && isWhitespaceChar(s.charAt(start))) {
+        start = start + 1
+    }
+    while (end > start && isWhitespaceChar(s.charAt(end - 1))) {
+        end = end - 1
+    }
+    return s.substring(start, end)
+}
+
+indexOfSubstring(s: String, sub: String, from: Int): Int {
+    if (sub.length() == 0) {
+        return from
+    }
+    var maxStart = s.length() - sub.length()
+    var i = from
+    while (i <= maxStart) {
+        if (s.substring(i, i + sub.length()).equals(sub)) {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+splitString(s: String, delim: String): List {
+    var parts: List = List()
+    if (delim.length() == 0) {
+        parts.push(s)
+        return parts
+    }
+    var start = 0
+    var idx = indexOfSubstring(s, delim, start)
+    while (idx >= 0) {
+        parts.push(s.substring(start, idx))
+        start = idx + delim.length()
+        idx = indexOfSubstring(s, delim, start)
+    }
+    parts.push(s.substring(start, s.length()))
+    return parts
+}
+
+replaceString(s: String, old: String, replacement: String): String {
+    if (old.length() == 0) {
+        return s
+    }
+    var result = ""
+    var start = 0
+    var idx = indexOfSubstring(s, old, start)
+    while (idx >= 0) {
+        result = result + s.substring(start, idx) + replacement
+        start = idx + old.length()
+        idx = indexOfSubstring(s, old, start)
+    }
+    result = result + s.substring(start, s.length())
+    return result
+}
+
+indexInAlphabet(alphabet: String, c: Char): Int {
+    var i = 0
+    while (i < alphabet.length()) {
+        if (alphabet.charAt(i) == c) {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+charToUpper(c: Char): Char {
+    var idx = indexInAlphabet("abcdefghijklmnopqrstuvwxyz", c)
+    if (idx >= 0) {
+        return nx_string_char_at("ABCDEFGHIJKLMNOPQRSTUVWXYZ", idx)
+    }
+    return c
+}
+
+charToLower(c: Char): Char {
+    var idx = indexInAlphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZ", c)
+    if (idx >= 0) {
+        return nx_string_char_at("abcdefghijklmnopqrstuvwxyz", idx)
+    }
+    return c
+}
+
+toUpperCaseString(s: String): String {
+    var result = ""
+    var i = 0
+    while (i < s.length()) {
+        result = result + charToUpper(s.charAt(i)).toString()
+        i = i + 1
+    }
+    return result
+}
+
+toLowerCaseString(s: String): String {
+    var result = ""
+    var i = 0
+    while (i < s.length()) {
+        result = result + charToLower(s.charAt(i)).toString()
+        i = i + 1
+    }
+    return result
+}
+
+joinStrings(parts: List, sep: String): String {
+    var result = ""
+    var i = 0
+    while (i < parts.len()) {
+        if (i > 0) {
+            result = result + sep
+        }
+        var part: String = parts.get(i)
+        result = result + part
+        i = i + 1
+    }
+    return result
+}

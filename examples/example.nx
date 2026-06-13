@@ -1,0 +1,23 @@
+import std.io
+
+data Punto {
+    x: Int
+    y: Int
+}
+
+class PuntoService {
+    distanciaOrigenCuadrado(p: Punto): Int {
+        return p.x * p.x + p.y * p.y
+    }
+}
+
+areaAproximada(radio: Int): Int {
+    return 3 * radio * radio
+}
+
+main(): Void {
+    var p = Punto(x: 3, y: 4)
+    var svc = PuntoService()
+    io.println(svc.distanciaOrigenCuadrado(p))
+    io.println(areaAproximada(5))
+}

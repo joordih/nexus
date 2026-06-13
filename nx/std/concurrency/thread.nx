@@ -1,0 +1,10 @@
+class Thread(name: String) {
+
+    label(): String {
+        return this.name
+    }
+}
+
+namedThread(name: String): Thread {
+    return Thread(name: name)
+}

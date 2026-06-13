@@ -1,0 +1,26 @@
+final LCG_MULTIPLIER: Int = 1103515245
+final LCG_INCREMENT: Int = 12345
+final LCG_MODULUS: Int = 2147483647
+
+class Random(seed: Int) {
+
+    nextInt(): Int {
+        var next = this.seed * LCG_MULTIPLIER + LCG_INCREMENT
+        this.seed = next % LCG_MODULUS
+        if (this.seed < 0) {
+            this.seed = this.seed + LCG_MODULUS
+        }
+        return this.seed
+    }
+
+    nextIntBounded(bound: Int): Int {
+        if (bound <= 0) {
+            return 0
+        }
+        var raw = this.nextInt()
+        if (raw < 0) {
+            raw = -raw
+        }
+        return raw % bound
+    }
+}

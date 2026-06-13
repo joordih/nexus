@@ -1,0 +1,18 @@
+import std.network.socket
+
+class ServerSocket(fd: Int) {
+
+    accept(): Socket {
+        var clientFd = nx_tcp_accept(this.fd)
+        return Socket(fd: clientFd)
+    }
+
+    close(): Void {
+        nx_tcp_close(this.fd)
+    }
+}
+
+listenSocket(port: Int): ServerSocket {
+    var fd = nx_tcp_listen(port)
+    return ServerSocket(fd: fd)
+}

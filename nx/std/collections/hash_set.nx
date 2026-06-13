@@ -1,0 +1,18 @@
+class HashSet(keys: Map) {
+
+    size(): Int {
+        return this.keys.len()
+    }
+
+    isEmpty(): Bool {
+        return this.keys.len() == 0
+    }
+
+    add(key: String): Void {
+        this.keys.insert(key, true)
+    }
+
+    contains(key: String): Bool {
+        return this.keys.contains(key)
+    }
+}

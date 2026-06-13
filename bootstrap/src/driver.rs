@@ -486,6 +486,56 @@ pub fn generate_c_file(nx_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn parse_dir(dir: &str) -> Result<Program, String> {
+    let entries = fs::read_dir(dir)
+        .map_err(|e| format!("no se pudo abrir {}: {}", dir, e))?;
+    let mut nx_files: Vec<_> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map(|x| x == "nx").unwrap_or(false))
+        .collect();
+    nx_files.sort_by_key(|e| e.path());
+    let mut all_items = Vec::new();
+    for entry in nx_files {
+        let path = entry.path();
+        let p = parse_file(path.to_str().unwrap())?;
+        all_items.extend(p.items);
+    }
+    Ok(Program { items: all_items })
+}
+
+pub fn compile_dir(dir: &str, output: &str) -> Result<(), String> {
+    let program = parse_dir(dir)?;
+    let ctx = crate::sema::check_program(&program)
+        .map_err(|errs| errs.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"))?;
+    let c_code = crate::codegen_c::generate_c(&program, ctx);
+
+    let c_path = format!("{}.c", output);
+    fs::write(&c_path, &c_code)
+        .map_err(|e| format!("no se pudo escribir {}: {}", c_path, e))?;
+
+    let runtime_c = find_runtime_path();
+    let runtime_dir = find_runtime_dir();
+    let clang = find_clang();
+    let mut cmd = std::process::Command::new(&clang);
+    cmd.args(&[&c_path, &runtime_c, "-I", &runtime_dir, "-o", output, "-Wno-return-type", "-Wno-deprecated-declarations"]);
+    if let Ok(inc) = std::env::var("GC_INCLUDE") {
+        cmd.args(&["-I", &inc]);
+    }
+    if let Ok(lib) = std::env::var("GC_LIB") {
+        cmd.args(&["-L", &lib]);
+    }
+    cmd.arg("-lgc");
+    #[cfg(target_os = "windows")]
+    cmd.args(&["-Xlinker", "/subsystem:console", "-Wl,/Brepro"]);
+    let status = cmd.status()
+        .map_err(|e| format!("no se pudo ejecutar {}: {}", clang, e))?;
+
+    if !status.success() {
+        return Err(format!("clang falló al compilar {}", c_path));
+    }
+    Ok(())
+}
+
 pub fn compile_file(nx_path: &str, output: &str) -> Result<(), String> {
     let program = parse_file(nx_path)?;
     let ctx = crate::sema::check_program(&program)
@@ -509,7 +559,7 @@ pub fn compile_file(nx_path: &str, output: &str) -> Result<(), String> {
     }
     cmd.arg("-lgc");
     #[cfg(target_os = "windows")]
-    cmd.args(&["-Xlinker", "/subsystem:console"]);
+    cmd.args(&["-Xlinker", "/subsystem:console", "-Wl,/Brepro"]);
     let status = cmd.status()
         .map_err(|e| format!("no se pudo ejecutar {}: {}", clang, e))?;
 
@@ -543,6 +593,22 @@ fn find_runtime_path() -> String {
     "runtime/nexus_runtime.c".to_string()
 }
 
+fn resolve_e2e_executable(bin_path: &str) -> std::path::PathBuf {
+    let path = std::path::PathBuf::from(bin_path);
+    if path.exists() {
+        return path;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let with_exe = format!("{}.exe", bin_path);
+        let exe_path = std::path::PathBuf::from(&with_exe);
+        if exe_path.exists() {
+            return exe_path;
+        }
+    }
+    path
+}
+
 pub fn run_e2e_tests(test_dir: &str) -> bool {
     let entries = match fs::read_dir(test_dir) {
         Ok(e) => e,
@@ -569,10 +635,15 @@ pub fn run_e2e_tests(test_dir: &str) -> bool {
             Ok(s) => s,
             Err(e) => { eprintln!("error leyendo {}: {}", expected_path.display(), e); all_pass = false; continue; }
         };
-        let bin_path = format!("/tmp/nx_e2e_test");
+        let base = nx_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("test");
+        let bin_path = format!("{}/{}.out", test_dir, base);
         match compile_file(nx_path.to_str().unwrap(), &bin_path) {
             Ok(_) => {
-                let output = std::process::Command::new(&bin_path)
+                let run_path = resolve_e2e_executable(&bin_path);
+                let output = std::process::Command::new(&run_path)
                     .output()
                     .map_err(|e| e.to_string());
                 match output {
