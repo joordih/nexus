@@ -1,0 +1,1095 @@
+import std.io
+
+final NXTYPE_INT: Int = 1
+final NXTYPE_LONG: Int = 2
+final NXTYPE_FLOAT: Int = 3
+final NXTYPE_DOUBLE: Int = 4
+final NXTYPE_BOOL: Int = 5
+final NXTYPE_CHAR: Int = 6
+final NXTYPE_STRING: Int = 7
+final NXTYPE_VOID: Int = 8
+final NXTYPE_NULL: Int = 9
+final NXTYPE_NAMED: Int = 10
+final NXTYPE_LIST: Int = 11
+final NXTYPE_MAP: Int = 12
+final NXTYPE_NULLABLE: Int = 13
+final NXTYPE_UNKNOWN: Int = 99
+
+data NxType {
+    kind: Int
+    name: String
+    elem: NxType?
+    key: NxType?
+    val: NxType?
+}
+
+makeNxTypeSimple(kind: Int): NxType {
+    return NxType(kind: kind, name: "", elem: null, key: null, val: null)
+}
+
+makeNxTypeNamed(name: String): NxType {
+    return NxType(kind: NXTYPE_NAMED, name: name, elem: null, key: null, val: null)
+}
+
+makeNxTypeList(elem: NxType): NxType {
+    return NxType(kind: NXTYPE_LIST, name: "", elem: elem, key: null, val: null)
+}
+
+makeNxTypeMap(k: NxType, v: NxType): NxType {
+    return NxType(kind: NXTYPE_MAP, name: "", elem: null, key: k, val: v)
+}
+
+makeNxTypeNullable(inner: NxType): NxType {
+    return NxType(kind: NXTYPE_NULLABLE, name: "", elem: inner, key: null, val: null)
+}
+
+nxTypeUnknown(): NxType {
+    return makeNxTypeSimple(NXTYPE_UNKNOWN)
+}
+
+nxTypeEq(a: NxType, b: NxType): Bool {
+    if (a.kind != b.kind) {
+        return false
+    }
+    if (a.kind == NXTYPE_NAMED) {
+        return a.name == b.name
+    }
+    return true
+}
+
+nxTypeToString(t: NxType): String {
+    if (t.kind == NXTYPE_INT) {
+        return "Int"
+    }
+    if (t.kind == NXTYPE_LONG) {
+        return "Long"
+    }
+    if (t.kind == NXTYPE_FLOAT) {
+        return "Float"
+    }
+    if (t.kind == NXTYPE_DOUBLE) {
+        return "Double"
+    }
+    if (t.kind == NXTYPE_BOOL) {
+        return "Bool"
+    }
+    if (t.kind == NXTYPE_CHAR) {
+        return "Char"
+    }
+    if (t.kind == NXTYPE_STRING) {
+        return "String"
+    }
+    if (t.kind == NXTYPE_VOID) {
+        return "Void"
+    }
+    if (t.kind == NXTYPE_NULL) {
+        return "null"
+    }
+    if (t.kind == NXTYPE_NAMED) {
+        return t.name
+    }
+    if (t.kind == NXTYPE_LIST) {
+        return "List<" + nxTypeToString(t.elem!) + ">"
+    }
+    if (t.kind == NXTYPE_MAP) {
+        return "Map<" + nxTypeToString(t.key!) + "," + nxTypeToString(t.val!) + ">"
+    }
+    if (t.kind == NXTYPE_NULLABLE) {
+        return nxTypeToString(t.elem!) + "?"
+    }
+    return "?"
+}
+
+data StructField {
+    name: String
+    ty: NxType?
+}
+
+data StructInfo {
+    name: String
+    fields: List
+    is_data: Bool
+}
+
+data FnInfo {
+    name: String
+    param_types: List
+    return_type: NxType?
+}
+
+data SemaError {
+    msg: String
+    line: Int
+    col: Int
+}
+
+class SemaCtx(
+    struct_names: List,
+    struct_infos: List,
+    fn_names: List,
+    fn_infos: List,
+    method_class_names: List,
+    method_fn_names: List,
+    method_fn_infos: List,
+    global_names: List,
+    global_types: List,
+    import_names: List,
+    collected_imports: List,
+    errors: List
+) {
+
+    addError(msg: String, line: Int, col: Int): Void {
+        var err = SemaError(msg: msg, line: line, col: col)
+        this.errors.push(err)
+    }
+
+    findStruct(name: String): StructInfo? {
+        var i = 0
+        while (i < this.struct_names.len()) {
+            var n: String = this.struct_names.get(i)
+            if (n == name) {
+                var si: StructInfo = this.struct_infos.get(i)
+                return si
+            }
+            i = i + 1
+        }
+        return null
+    }
+
+    addStruct(si: StructInfo): Void {
+        if (this.findStruct(si.name) != null) {
+            return
+        }
+        this.struct_names.push(si.name)
+        this.struct_infos.push(si)
+    }
+
+    findFn(name: String): FnInfo? {
+        var i = 0
+        while (i < this.fn_names.len()) {
+            var n: String = this.fn_names.get(i)
+            if (n == name) {
+                var fi: FnInfo = this.fn_infos.get(i)
+                return fi
+            }
+            i = i + 1
+        }
+        return null
+    }
+
+    addFn(fi: FnInfo): Void {
+        if (this.findFn(fi.name) != null) {
+            return
+        }
+        this.fn_names.push(fi.name)
+        this.fn_infos.push(fi)
+    }
+
+    findMethod(className: String, methodName: String): FnInfo? {
+        var i = 0
+        while (i < this.method_class_names.len()) {
+            var cn: String = this.method_class_names.get(i)
+            var mn: String = this.method_fn_names.get(i)
+            if (cn == className && mn == methodName) {
+                var fi: FnInfo = this.method_fn_infos.get(i)
+                return fi
+            }
+            i = i + 1
+        }
+        return null
+    }
+
+    addMethod(className: String, fi: FnInfo): Void {
+        if (this.findMethod(className, fi.name) != null) {
+            return
+        }
+        this.method_class_names.push(className)
+        this.method_fn_names.push(fi.name)
+        this.method_fn_infos.push(fi)
+    }
+
+    findGlobal(name: String): NxType? {
+        var i = 0
+        while (i < this.global_names.len()) {
+            var n: String = this.global_names.get(i)
+            if (n == name) {
+                var t: NxType = this.global_types.get(i)
+                return t
+            }
+            i = i + 1
+        }
+        return null
+    }
+
+    addGlobal(name: String, ty: NxType): Void {
+        if (this.findGlobal(name) != null) {
+            return
+        }
+        this.global_names.push(name)
+        this.global_types.push(ty)
+    }
+
+    hasImport(name: String): Bool {
+        var i = 0
+        while (i < this.import_names.len()) {
+            var n: String = this.import_names.get(i)
+            if (n == name) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    addImport(name: String): Void {
+        this.import_names.push(name)
+    }
+
+    hasCollectedImport(path: String): Bool {
+        var i = 0
+        while (i < this.collected_imports.len()) {
+            var p: String = this.collected_imports.get(i)
+            if (p == path) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    markCollectedImport(path: String): Void {
+        this.collected_imports.push(path)
+    }
+
+    resolveType(ty: String): NxType {
+        if (ty == "Int") {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (ty == "Long") {
+            return makeNxTypeSimple(NXTYPE_LONG)
+        }
+        if (ty == "Float") {
+            return makeNxTypeSimple(NXTYPE_FLOAT)
+        }
+        if (ty == "Double") {
+            return makeNxTypeSimple(NXTYPE_DOUBLE)
+        }
+        if (ty == "Bool") {
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        if (ty == "Char") {
+            return makeNxTypeSimple(NXTYPE_CHAR)
+        }
+        if (ty == "String") {
+            return makeNxTypeSimple(NXTYPE_STRING)
+        }
+        if (ty == "Void") {
+            return makeNxTypeSimple(NXTYPE_VOID)
+        }
+        if (ty == "") {
+            return makeNxTypeSimple(NXTYPE_VOID)
+        }
+        if (ty == "List") {
+            return makeNxTypeList(nxTypeUnknown())
+        }
+        if (ty == "Map") {
+            return makeNxTypeMap(nxTypeUnknown(), nxTypeUnknown())
+        }
+        var tlen = ty.length()
+        if (tlen > 1) {
+            var last = ty.charAt(tlen - 1)
+            if (last == '?') {
+                var inner = ty.substring(0, tlen - 1)
+                var innerTy = this.resolveType(inner)
+                return makeNxTypeNullable(innerTy)
+            }
+        }
+        if (tlen > 5) {
+            if (ty.startsWith("List<")) {
+                var inner2 = ty.substring(5, tlen - 1)
+                var elemTy = this.resolveType(inner2)
+                return makeNxTypeList(elemTy)
+            }
+            if (ty.startsWith("Map<")) {
+                return makeNxTypeMap(nxTypeUnknown(), nxTypeUnknown())
+            }
+        }
+        return makeNxTypeNamed(ty)
+    }
+
+    typesCompatible(a: NxType, b: NxType): Bool {
+        if (a.kind == NXTYPE_UNKNOWN || b.kind == NXTYPE_UNKNOWN) {
+            return true
+        }
+        if (a.kind == NXTYPE_NULL) {
+            return b.kind == NXTYPE_NULLABLE || b.kind == NXTYPE_NULL || b.kind == NXTYPE_UNKNOWN
+        }
+        if (b.kind == NXTYPE_NULL) {
+            return a.kind == NXTYPE_NULLABLE || a.kind == NXTYPE_NULL || a.kind == NXTYPE_UNKNOWN
+        }
+        if (a.kind == NXTYPE_NULLABLE && b.kind == NXTYPE_NULLABLE) {
+            return this.typesCompatible(a.elem!, b.elem!)
+        }
+        if (a.kind == NXTYPE_NULLABLE) {
+            return this.typesCompatible(a.elem!, b)
+        }
+        if (b.kind == NXTYPE_NULLABLE) {
+            return this.typesCompatible(a, b.elem!)
+        }
+        return nxTypeEq(a, b)
+    }
+}
+
+makeSemaCtx(): SemaCtx {
+    return SemaCtx(
+        struct_names: List(), struct_infos: List(),
+        fn_names: List(), fn_infos: List(),
+        method_class_names: List(), method_fn_names: List(), method_fn_infos: List(),
+        global_names: List(), global_types: List(),
+        import_names: List(), collected_imports: List(), errors: List()
+    )
+}
+
+dotsToSlashes(s: String): String {
+    var out = ""
+    var i = 0
+    while (i < s.length()) {
+        var c = s.charAt(i)
+        if (c == '.') {
+            out = out + "/"
+        } else {
+            out = out + c.toString()
+        }
+        i = i + 1
+    }
+    return out
+}
+
+importPathToFile(path: String): String {
+    if (path == "std.io") {
+        return ""
+    }
+    if (path.startsWith("std.")) {
+        var rest = path.substring(4, path.length())
+        return "nx/std/" + dotsToSlashes(rest) + ".nx"
+    }
+    if (path.startsWith("compiler.")) {
+        var rest2 = path.substring(9, path.length())
+        return "compiler/src/" + rest2 + ".nx"
+    }
+    if (path.startsWith("lsp.")) {
+        var rest3 = path.substring(4, path.length())
+        return "nx/lsp/" + dotsToSlashes(rest3) + ".nx"
+    }
+    return ""
+}
+
+parseModuleFile(filePath: String): Program {
+    var src = io.readFile(filePath)
+    var tokens = tokenizeSource(src)
+    return parseSource(tokens)
+}
+
+collectModuleItems(ctx: SemaCtx, prog: Program): Void {
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        collectItem(ctx, item)
+        i = i + 1
+    }
+}
+
+collectImportModule(ctx: SemaCtx, importPath: String): Void {
+    if (ctx.hasCollectedImport(importPath)) {
+        return
+    }
+    ctx.markCollectedImport(importPath)
+    var filePath = importPathToFile(importPath)
+    if (filePath == "") {
+        return
+    }
+    var prog = parseModuleFile(filePath)
+    collectModuleItems(ctx, prog)
+}
+
+itemImportPath(item: Item): String {
+    if (item.kind == ITEM_IMPORT) {
+        return item.import_path
+    }
+    return ""
+}
+
+hasCollectedPath(collected: List, importPath: String): Bool {
+    var i = 0
+    while (i < collected.len()) {
+        var p: String = collected.get(i)
+        if (p == importPath) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+markCollectedPath(collected: List, importPath: String): Void {
+    collected.push(importPath)
+}
+
+appendModuleItems(allItems: List, prog: Program): Void {
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        allItems.push(item)
+        i = i + 1
+    }
+}
+
+appendParseErrorsFrom(allErrors: List, prog: Program): Void {
+    var i = 0
+    while (i < prog.parse_errors.len()) {
+        allErrors.push(prog.parse_errors.get(i))
+        i = i + 1
+    }
+}
+
+expandProgramImports(prog: Program): Program {
+    var allItems: List = List()
+    var allErrors: List = List()
+    var collected: List = List()
+    var i = 0
+    while (i < prog.items.len()) {
+        allItems.push(prog.items.get(i))
+        i = i + 1
+    }
+    var pe = 0
+    while (pe < prog.parse_errors.len()) {
+        allErrors.push(prog.parse_errors.get(pe))
+        pe = pe + 1
+    }
+    var changed = true
+    while (changed) {
+        changed = false
+        var j = 0
+        while (j < allItems.len()) {
+            var item: Item = allItems.get(j)
+            if (item.kind == ITEM_IMPORT) {
+                var importPath = item.import_path
+                if (!hasCollectedPath(collected, importPath)) {
+                    markCollectedPath(collected, importPath)
+                    var filePath = importPathToFile(importPath)
+                    if (filePath != "") {
+                        var modProg = parseModuleFile(filePath)
+                        appendModuleItems(allItems, modProg)
+                        appendParseErrorsFrom(allErrors, modProg)
+                        changed = true
+                    }
+                }
+            }
+            j = j + 1
+        }
+    }
+    return Program(items: allItems, parse_errors: allErrors)
+}
+
+class Scope(parent: Scope?, names: List, types: List) {
+
+    define(name: String, ty: NxType): Void {
+        this.names.push(name)
+        this.types.push(ty)
+    }
+
+    lookup(name: String): NxType? {
+        var i = this.names.len() - 1
+        while (i >= 0) {
+            var n: String = this.names.get(i)
+            if (n == name) {
+                var t: NxType = this.types.get(i)
+                return t
+            }
+            i = i - 1
+        }
+        if (this.parent != null) {
+            return this.parent!.lookup(name)
+        }
+        return null
+    }
+}
+
+makeScope(parent: Scope?): Scope {
+    return Scope(parent: parent, names: List(), types: List())
+}
+
+collectItem(ctx: SemaCtx, item: Item): Void {
+    if (item.kind == ITEM_IMPORT) {
+        var path = item.import_path
+        var lastDot = -1
+        var j = 0
+        while (j < path.length()) {
+            if (path.charAt(j) == '.') {
+                lastDot = j
+            }
+            j = j + 1
+        }
+        var lastName = ""
+        if (lastDot >= 0) {
+            lastName = path.substring(lastDot + 1, path.length())
+        } else {
+            lastName = path
+        }
+        ctx.addImport(lastName)
+        collectImportModule(ctx, path)
+        return
+    }
+    if (item.kind == ITEM_DATA || item.kind == ITEM_VALUE) {
+        var dd: DataDecl = item.data_decl!
+        var fields: List = List()
+        var i = 0
+        while (i < dd.fields.len()) {
+            var f: FieldDecl = dd.fields.get(i)
+            var ty = ctx.resolveType(f.ty)
+            var sf = StructField(name: f.name, ty: ty)
+            fields.push(sf)
+            i = i + 1
+        }
+        var si = StructInfo(name: dd.name, fields: fields, is_data: true)
+        ctx.addStruct(si)
+        return
+    }
+    if (item.kind == ITEM_CLASS) {
+        var cd: ClassDecl = item.class_decl!
+        var fields2: List = List()
+        var i2 = 0
+        while (i2 < cd.primary_params.len()) {
+            var f2: FieldDecl = cd.primary_params.get(i2)
+            var ty2 = ctx.resolveType(f2.ty)
+            var sf2 = StructField(name: f2.name, ty: ty2)
+            fields2.push(sf2)
+            i2 = i2 + 1
+        }
+        var i3 = 0
+        while (i3 < cd.fields.len()) {
+            var f3: FieldDecl = cd.fields.get(i3)
+            var ty3 = ctx.resolveType(f3.ty)
+            var sf3 = StructField(name: f3.name, ty: ty3)
+            fields2.push(sf3)
+            i3 = i3 + 1
+        }
+        var si2 = StructInfo(name: cd.name, fields: fields2, is_data: false)
+        ctx.addStruct(si2)
+        var i4 = 0
+        while (i4 < cd.methods.len()) {
+            var fn: Function = cd.methods.get(i4)
+            var ptypes: List = List()
+            var k = 0
+            while (k < fn.params.len()) {
+                var p: Param = fn.params.get(k)
+                var pt = ctx.resolveType(p.ty)
+                ptypes.push(pt)
+                k = k + 1
+            }
+            var ret = ctx.resolveType(fn.return_type)
+            var fi = FnInfo(name: fn.name, param_types: ptypes, return_type: ret)
+            ctx.addMethod(cd.name, fi)
+            i4 = i4 + 1
+        }
+        return
+    }
+    if (item.kind == ITEM_FUNCTION) {
+        var fn2: Function = item.function_decl!
+        var ptypes2: List = List()
+        var k2 = 0
+        while (k2 < fn2.params.len()) {
+            var p2: Param = fn2.params.get(k2)
+            var pt2 = ctx.resolveType(p2.ty)
+            ptypes2.push(pt2)
+            k2 = k2 + 1
+        }
+        var ret2 = ctx.resolveType(fn2.return_type)
+        var fi2 = FnInfo(name: fn2.name, param_types: ptypes2, return_type: ret2)
+        ctx.addFn(fi2)
+        return
+    }
+    if (item.kind == ITEM_GLOBAL) {
+        var gc: GlobalConst = item.global_const!
+        var ty4 = ctx.resolveType(gc.ty)
+        ctx.addGlobal(gc.name, ty4)
+        return
+    }
+}
+
+checkItem(ctx: SemaCtx, item: Item): Void {
+    if (item.kind == ITEM_FUNCTION) {
+        var fn: Function = item.function_decl!
+        var ret = ctx.resolveType(fn.return_type)
+        var scope = makeScope(null)
+        var k = 0
+        while (k < fn.params.len()) {
+            var p: Param = fn.params.get(k)
+            var pt = ctx.resolveType(p.ty)
+            scope.define(p.name, pt)
+            k = k + 1
+        }
+        var returns = checkFnBody(ctx, fn, scope, ret)
+        if (ret.kind != NXTYPE_VOID && ret.kind != NXTYPE_UNKNOWN && !returns) {
+            ctx.addError("funcion " + fn.name + " no siempre retorna", fn.line, fn.col)
+        }
+        return
+    }
+    if (item.kind == ITEM_CLASS) {
+        var cd: ClassDecl = item.class_decl!
+        var i = 0
+        while (i < cd.methods.len()) {
+            var fn2: Function = cd.methods.get(i)
+            var ret2 = ctx.resolveType(fn2.return_type)
+            var scope2 = makeScope(null)
+            scope2.define("this", makeNxTypeNamed(cd.name))
+            var k2 = 0
+            while (k2 < cd.primary_params.len()) {
+                var pp: FieldDecl = cd.primary_params.get(k2)
+                var pt2 = ctx.resolveType(pp.ty)
+                scope2.define(pp.name, pt2)
+                k2 = k2 + 1
+            }
+            var k3 = 0
+            while (k3 < fn2.params.len()) {
+                var p2: Param = fn2.params.get(k3)
+                var pt3 = ctx.resolveType(p2.ty)
+                scope2.define(p2.name, pt3)
+                k3 = k3 + 1
+            }
+            var returns2 = checkFnBody(ctx, fn2, scope2, ret2)
+            if (ret2.kind != NXTYPE_VOID && ret2.kind != NXTYPE_UNKNOWN && !returns2) {
+                ctx.addError("metodo " + cd.name + "::" + fn2.name + " no siempre retorna", fn2.line, fn2.col)
+            }
+            i = i + 1
+        }
+        return
+    }
+}
+
+checkFnBody(ctx: SemaCtx, fn: Function, scope: Scope, retTy: NxType): Bool {
+    if (fn.is_block_body) {
+        return checkStmts(ctx, fn.stmts, scope, retTy)
+    }
+    if (fn.body_expr != null) {
+        inferExpr(ctx, fn.body_expr!, scope)
+        return true
+    }
+    return false
+}
+
+checkStmts(ctx: SemaCtx, stmts: List, scope: Scope, retTy: NxType): Bool {
+    var alwaysReturns = false
+    var i = 0
+    while (i < stmts.len()) {
+        var s: Stmt = stmts.get(i)
+        if (checkStmt(ctx, s, scope, retTy)) {
+            alwaysReturns = true
+        }
+        i = i + 1
+    }
+    return alwaysReturns
+}
+
+checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
+    if (stmt.kind == STMT_VAR) {
+        var valTy = inferExpr(ctx, stmt.init_val!, scope)
+        if (stmt.var_type != "") {
+            var declared = ctx.resolveType(stmt.var_type)
+            if (!ctx.typesCompatible(valTy, declared)) {
+                ctx.addError("tipo incompatible en " + stmt.var_name, stmt.line, stmt.col)
+            }
+            scope.define(stmt.var_name, declared)
+        } else {
+            scope.define(stmt.var_name, valTy)
+        }
+        return false
+    }
+    if (stmt.kind == STMT_RETURN) {
+        if (stmt.init_val != null) {
+            var retActual = inferExpr(ctx, stmt.init_val!, scope)
+            if (!ctx.typesCompatible(retActual, retTy)) {
+                ctx.addError("tipo de retorno incompatible", stmt.line, stmt.col)
+            }
+        }
+        return true
+    }
+    if (stmt.kind == STMT_BREAK || stmt.kind == STMT_CONTINUE) {
+        return false
+    }
+    if (stmt.kind == STMT_IF) {
+        var condTy = inferExpr(ctx, stmt.cond!, scope)
+        var thenScope = makeScope(scope)
+        var thenRet = checkStmts(ctx, stmt.then_stmts, thenScope, retTy)
+        var elseRet = false
+        if (stmt.else_stmts.len() > 0) {
+            var first: Stmt = stmt.else_stmts.get(0)
+            if (first.kind == STMT_IF && stmt.else_stmts.len() == 1) {
+                elseRet = checkStmt(ctx, first, scope, retTy)
+            } else {
+                var elseScope = makeScope(scope)
+                elseRet = checkStmts(ctx, stmt.else_stmts, elseScope, retTy)
+            }
+        }
+        return thenRet && elseRet
+    }
+    if (stmt.kind == STMT_WHILE) {
+        inferExpr(ctx, stmt.cond!, scope)
+        var bodyScope = makeScope(scope)
+        checkStmts(ctx, stmt.body_stmts, bodyScope, retTy)
+        return false
+    }
+    if (stmt.kind == STMT_FOR) {
+        var iterTy = inferExpr(ctx, stmt.iterable!, scope)
+        var elemTy = nxTypeUnknown()
+        if (iterTy.kind == NXTYPE_LIST) {
+            elemTy = iterTy.elem!
+        }
+        var forScope = makeScope(scope)
+        forScope.define(stmt.for_var, elemTy)
+        checkStmts(ctx, stmt.body_stmts, forScope, retTy)
+        return false
+    }
+    if (stmt.kind == STMT_SWITCH) {
+        inferExpr(ctx, stmt.switch_subject!, scope)
+        var allRet = stmt.switch_arms.len() > 0
+        var i = 0
+        while (i < stmt.switch_arms.len()) {
+            var arm: SwitchArm = stmt.switch_arms.get(i)
+            if (arm.pattern != null) {
+                inferExpr(ctx, arm.pattern!, scope)
+            }
+            var armScope = makeScope(scope)
+            var armRet = checkStmts(ctx, arm.stmts, armScope, retTy)
+            if (!armRet) {
+                allRet = false
+            }
+            i = i + 1
+        }
+        return allRet
+    }
+    if (stmt.kind == STMT_TRY) {
+        checkStmts(ctx, stmt.then_stmts, scope, retTy)
+        var catchScope = makeScope(scope)
+        catchScope.define(stmt.for_var, makeNxTypeSimple(NXTYPE_STRING))
+        checkStmts(ctx, stmt.else_stmts, catchScope, retTy)
+        return false
+    }
+    if (stmt.kind == STMT_THROW) {
+        return false
+    }
+    if (stmt.kind == STMT_EXPR) {
+        if (stmt.expr != null) {
+            inferExpr(ctx, stmt.expr!, scope)
+        }
+        if (stmt.assign_val != null) {
+            inferExpr(ctx, stmt.assign_val!, scope)
+        }
+        return false
+    }
+    return false
+}
+
+inferExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
+    if (expr.kind == EXPR_INT) {
+        return makeNxTypeSimple(NXTYPE_INT)
+    }
+    if (expr.kind == EXPR_FLOAT) {
+        return makeNxTypeSimple(NXTYPE_DOUBLE)
+    }
+    if (expr.kind == EXPR_STRING) {
+        return makeNxTypeSimple(NXTYPE_STRING)
+    }
+    if (expr.kind == EXPR_CHAR) {
+        return makeNxTypeSimple(NXTYPE_CHAR)
+    }
+    if (expr.kind == EXPR_BOOL) {
+        return makeNxTypeSimple(NXTYPE_BOOL)
+    }
+    if (expr.kind == EXPR_NULL) {
+        return makeNxTypeSimple(NXTYPE_NULL)
+    }
+    if (expr.kind == EXPR_THIS) {
+        var t = scope.lookup("this")
+        if (t != null) {
+            return t!
+        }
+        return nxTypeUnknown()
+    }
+    if (expr.kind == EXPR_PATH) {
+        var name: String = expr.path_parts.get(0)
+        var found = scope.lookup(name)
+        if (found != null) {
+            return found!
+        }
+        var g = ctx.findGlobal(name)
+        if (g != null) {
+            return g!
+        }
+        if (name == "Map" || name == "List") {
+            return nxTypeUnknown()
+        }
+        if (ctx.findFn(name) != null || ctx.findStruct(name) != null || ctx.hasImport(name)) {
+            return nxTypeUnknown()
+        }
+        if (name == "Int" || name == "Long" || name == "Float" || name == "Double" ||
+            name == "Bool" || name == "Char" || name == "String" || name == "Void" ||
+            name == "true" || name == "false" || name == "null") {
+            return nxTypeUnknown()
+        }
+        ctx.addError("nombre no resuelto: " + name, expr.line, expr.col)
+        return nxTypeUnknown()
+    }
+    if (expr.kind == EXPR_UNARY) {
+        var innerTy = inferExpr(ctx, expr.left!, scope)
+        if (expr.op == OP_NEG) {
+            return innerTy
+        }
+        return makeNxTypeSimple(NXTYPE_BOOL)
+    }
+    if (expr.kind == EXPR_BINARY) {
+        var lt = inferExpr(ctx, expr.left!, scope)
+        var rt = inferExpr(ctx, expr.right!, scope)
+        if (expr.op == OP_ADD || expr.op == OP_SUB || expr.op == OP_MUL || expr.op == OP_DIV || expr.op == OP_MOD) {
+            if (lt.kind == NXTYPE_STRING || rt.kind == NXTYPE_STRING) {
+                return makeNxTypeSimple(NXTYPE_STRING)
+            }
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        return makeNxTypeSimple(NXTYPE_BOOL)
+    }
+    if (expr.kind == EXPR_CALL) {
+        return inferCallExpr(ctx, expr, scope)
+    }
+    if (expr.kind == EXPR_METHOD) {
+        return inferMethodExpr(ctx, expr, scope)
+    }
+    if (expr.kind == EXPR_FIELD) {
+        var recvTy = inferExpr(ctx, expr.receiver!, scope)
+        if (recvTy.kind == NXTYPE_STRING && expr.field_name == "length") {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (recvTy.kind == NXTYPE_NAMED) {
+            var si = ctx.findStruct(recvTy.name)
+            if (si != null) {
+                var k = 0
+                while (k < si!.fields.len()) {
+                    var sf: StructField = si!.fields.get(k)
+                    if (sf.name == expr.field_name) {
+                        if (sf.ty != null) {
+                            return sf.ty!
+                        }
+                    }
+                    k = k + 1
+                }
+            }
+        }
+        return nxTypeUnknown()
+    }
+    if (expr.kind == EXPR_INDEX) {
+        var baseTy = inferExpr(ctx, expr.left!, scope)
+        if (baseTy.kind == NXTYPE_LIST && baseTy.elem != null) {
+            return baseTy.elem!
+        }
+        return nxTypeUnknown()
+    }
+    if (expr.kind == EXPR_NULL_ASSERT) {
+        var innerTy2 = inferExpr(ctx, expr.left!, scope)
+        if (innerTy2.kind == NXTYPE_NULLABLE && innerTy2.elem != null) {
+            return innerTy2.elem!
+        }
+        return innerTy2
+    }
+    if (expr.kind == EXPR_ELVIS) {
+        var leftTy = inferExpr(ctx, expr.left!, scope)
+        inferExpr(ctx, expr.right!, scope)
+        return leftTy
+    }
+    if (expr.kind == EXPR_LIST) {
+        var i = 0
+        while (i < expr.elems.len()) {
+            var e: Expr = expr.elems.get(i)
+            inferExpr(ctx, e, scope)
+            i = i + 1
+        }
+        return makeNxTypeList(nxTypeUnknown())
+    }
+    if (expr.kind == EXPR_LAMBDA) {
+        return nxTypeUnknown()
+    }
+    if (expr.kind == EXPR_SWITCH) {
+        return nxTypeUnknown()
+    }
+    return nxTypeUnknown()
+}
+
+moduleFnReturnType(ctx: SemaCtx, modName: String, fnName: String): NxType {
+    if (modName == "io" || ctx.hasImport(modName)) {
+        var modFn = ctx.findFn(fnName)
+        if (modFn != null) {
+            if (modFn!.return_type != null) {
+                return modFn!.return_type!
+            }
+        }
+    }
+    return nxTypeUnknown()
+}
+
+inferCallExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
+    var callee: Expr = expr.callee!
+    var i = 0
+    while (i < expr.args.len()) {
+        var arg: CallArg = expr.args.get(i)
+        if (arg.val != null) {
+            inferExpr(ctx, arg.val!, scope)
+        }
+        i = i + 1
+    }
+    if (callee.kind == EXPR_PATH) {
+        var parts: List = callee.path_parts
+        if (parts.len() == 2) {
+            return moduleFnReturnType(ctx, parts.get(0), parts.get(1))
+        }
+        var name: String = callee.path_parts.get(0)
+        if (name == "List") {
+            return makeNxTypeList(nxTypeUnknown())
+        }
+        if (name == "Map") {
+            return makeNxTypeMap(nxTypeUnknown(), nxTypeUnknown())
+        }
+        if (name == "nx_string_char_at") {
+            return makeNxTypeSimple(NXTYPE_CHAR)
+        }
+        if (name == "nx_string_substring" || name == "nx_get_arg" ||
+            name == "nx_read_header_line" || name == "nx_read_stdin_n" ||
+            name == "nx_run_capture" || name == "nx_run_binary_capture" ||
+            name == "nx_tcp_read_line" || name == "nx_tcp_read" ||
+            name == "nx_fread_n" || name == "nx_getenv") {
+            return makeNxTypeSimple(NXTYPE_STRING)
+        }
+        if (name == "nx_get_arg_count" || name == "nx_tcp_listen" || name == "nx_tcp_accept" ||
+            name == "nx_write_stdout_n" || name == "nx_stat_size" || name == "nx_fopen" ||
+            name == "nx_time_now" || name == "nx_tcp_connect") {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (name == "nx_string_ends_with" || name == "nx_string_lt" ||
+            name == "nx_file_exists" || name == "nx_mkdir" || name == "nx_delete" ||
+            name == "nx_rename" || name == "nx_stat_is_dir") {
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        if (name == "nx_string_len") {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (name == "nx_string_contains") {
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        if (name == "nx_map_keys" || name == "nx_list_dir") {
+            return makeNxTypeList(nxTypeUnknown())
+        }
+        var si = ctx.findStruct(name)
+        if (si != null) {
+            return makeNxTypeNamed(name)
+        }
+        var fi = ctx.findFn(name)
+        if (fi != null) {
+            if (fi!.return_type != null) {
+                return fi!.return_type!
+            }
+            return nxTypeUnknown()
+        }
+    }
+    return nxTypeUnknown()
+}
+
+inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
+    if (expr.receiver != null) {
+        if (expr.receiver!.kind == EXPR_PATH) {
+            var modParts: List = expr.receiver!.path_parts
+            if (modParts.len() == 1) {
+                var modName: String = modParts.get(0)
+                if (modName == "io" || ctx.hasImport(modName)) {
+                    return moduleFnReturnType(ctx, modName, expr.method_name)
+                }
+            }
+        }
+    }
+    var recvTy = inferExpr(ctx, expr.receiver!, scope)
+    var i = 0
+    while (i < expr.args.len()) {
+        var arg: CallArg = expr.args.get(i)
+        if (arg.val != null) {
+            inferExpr(ctx, arg.val!, scope)
+        }
+        i = i + 1
+    }
+    if (recvTy.kind == NXTYPE_STRING) {
+        var m = expr.method_name
+        if (m == "length" || m == "toInt" || m == "charAt") {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (m == "charAt") {
+            return makeNxTypeSimple(NXTYPE_CHAR)
+        }
+        if (m == "equals" || m == "startsWith" || m == "contains") {
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        return makeNxTypeSimple(NXTYPE_STRING)
+    }
+    if (recvTy.kind == NXTYPE_LIST) {
+        var m2 = expr.method_name
+        if (m2 == "len" || m2 == "size") {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (m2 == "get" && recvTy.elem != null) {
+            return recvTy.elem!
+        }
+        if (m2 == "isEmpty") {
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        return nxTypeUnknown()
+    }
+    if (recvTy.kind == NXTYPE_MAP) {
+        var m3 = expr.method_name
+        if (m3 == "len" || m3 == "size") {
+            return makeNxTypeSimple(NXTYPE_INT)
+        }
+        if (m3 == "contains" || m3 == "containsKey") {
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
+        if (m3 == "get" || m3 == "getInt") {
+            if (recvTy.val != null) {
+                return recvTy.val!
+            }
+        }
+        return nxTypeUnknown()
+    }
+    if (recvTy.kind == NXTYPE_INT || recvTy.kind == NXTYPE_LONG || recvTy.kind == NXTYPE_BOOL || recvTy.kind == NXTYPE_CHAR) {
+        return makeNxTypeSimple(NXTYPE_STRING)
+    }
+    if (recvTy.kind == NXTYPE_NAMED) {
+        var fi = ctx.findMethod(recvTy.name, expr.method_name)
+        if (fi != null) {
+            if (fi!.return_type != null) {
+                return fi!.return_type!
+            }
+        }
+    }
+    return nxTypeUnknown()
+}
+
+checkProgram(prog: Program): SemaCtx {
+    var ctx = makeSemaCtx()
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        collectItem(ctx, item)
+        i = i + 1
+    }
+    var j = 0
+    while (j < prog.items.len()) {
+        var item2: Item = prog.items.get(j)
+        checkItem(ctx, item2)
+        j = j + 1
+    }
+    return ctx
+}

@@ -1,0 +1,23 @@
+import std.datetime.local_date
+import std.datetime.local_time
+
+final LOCAL_DATE_TIME_SECONDS_PER_DAY: Int = 86400
+
+class LocalDateTime(date: LocalDate, time: LocalTime) {
+
+    toString(): String {
+        return this.date.toString() + "T" + this.time.toString()
+    }
+}
+
+localDateTimeFromEpoch(epoch: Int): LocalDateTime {
+    var days = epoch / LOCAL_DATE_TIME_SECONDS_PER_DAY
+    var rem = epoch % LOCAL_DATE_TIME_SECONDS_PER_DAY
+    if (epoch < 0 && rem != 0) {
+        rem = rem + LOCAL_DATE_TIME_SECONDS_PER_DAY
+        days = days - 1
+    }
+    var date = civilFromDays(days)
+    var time = localTimeFromEpochDayRemainder(rem)
+    return LocalDateTime(date: date, time: time)
+}

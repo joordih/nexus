@@ -1,0 +1,36 @@
+absInt(n: Int): Int {
+    if (n < 0) {
+        return -n
+    }
+    return n
+}
+
+minInt(a: Int, b: Int): Int {
+    if (a <= b) {
+        return a
+    }
+    return b
+}
+
+maxInt(a: Int, b: Int): Int {
+    if (a >= b) {
+        return a
+    }
+    return b
+}
+
+powInt(base: Int, exp: Int): Int {
+    if (exp < 0) {
+        return 0
+    }
+    if (exp == 0) {
+        return 1
+    }
+    var result = 1
+    var i = 0
+    while (i < exp) {
+        result = result * base
+        i = i + 1
+    }
+    return result
+}

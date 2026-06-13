@@ -1,0 +1,960 @@
+import std.io
+
+tokenDisplay(tok: Token): String {
+    var k = tok.kind
+    if (k == TK_IDENT) {
+        return "Ident(" + tok.text + ")"
+    }
+    if (k == TK_INT) {
+        return "Int(" + tok.text + ")"
+    }
+    if (k == TK_FLOAT) {
+        return "Float(" + tok.text + ")"
+    }
+    if (k == TK_STRING) {
+        return "String(\"" + tok.text + "\")"
+    }
+    if (k == TK_CHAR) {
+        return "Char('" + tok.text + "')"
+    }
+    if (k == TK_VAR) { return "var" }
+    if (k == TK_FINAL) { return "final" }
+    if (k == TK_CLASS) { return "class" }
+    if (k == TK_DATA) { return "data" }
+    if (k == TK_VALUE) { return "value" }
+    if (k == TK_INTERFACE) { return "interface" }
+    if (k == TK_ANNOTATION) { return "annotation" }
+    if (k == TK_EXTENDS) { return "extends" }
+    if (k == TK_IMPLEMENTS) { return "implements" }
+    if (k == TK_IMPORT) { return "import" }
+    if (k == TK_MODULE) { return "module" }
+    if (k == TK_IF) { return "if" }
+    if (k == TK_ELSE) { return "else" }
+    if (k == TK_WHILE) { return "while" }
+    if (k == TK_FOR) { return "for" }
+    if (k == TK_IN) { return "in" }
+    if (k == TK_SWITCH) { return "switch" }
+    if (k == TK_CASE) { return "case" }
+    if (k == TK_DEFAULT) { return "default" }
+    if (k == TK_RETURN) { return "return" }
+    if (k == TK_BREAK) { return "break" }
+    if (k == TK_CONTINUE) { return "continue" }
+    if (k == TK_TRY) { return "try" }
+    if (k == TK_CATCH) { return "catch" }
+    if (k == TK_THROW) { return "throw" }
+    if (k == TK_TRUE) { return "true" }
+    if (k == TK_FALSE) { return "false" }
+    if (k == TK_NULL) { return "null" }
+    if (k == TK_THIS) { return "this" }
+    if (k == TK_PLUS) { return "+" }
+    if (k == TK_MINUS) { return "-" }
+    if (k == TK_STAR) { return "*" }
+    if (k == TK_SLASH) { return "/" }
+    if (k == TK_PERCENT) { return "%" }
+    if (k == TK_EQEQ) { return "==" }
+    if (k == TK_BANGEQ) { return "!=" }
+    if (k == TK_LT) { return "<" }
+    if (k == TK_LTEQ) { return "<=" }
+    if (k == TK_GT) { return ">" }
+    if (k == TK_GTEQ) { return ">=" }
+    if (k == TK_ANDAND) { return "&&" }
+    if (k == TK_OROR) { return "||" }
+    if (k == TK_BANG) { return "!" }
+    if (k == TK_EQ) { return "=" }
+    if (k == TK_ARROW) { return "->" }
+    if (k == TK_FAT_ARROW) { return "=>" }
+    if (k == TK_DOT) { return "." }
+    if (k == TK_COMMA) { return "," }
+    if (k == TK_COLON) { return ":" }
+    if (k == TK_SEMI) { return ";" }
+    if (k == TK_LPAREN) { return "(" }
+    if (k == TK_RPAREN) { return ")" }
+    if (k == TK_LBRACE) { return "{" }
+    if (k == TK_RBRACE) { return "}" }
+    if (k == TK_LBRACKET) { return "[" }
+    if (k == TK_RBRACKET) { return "]" }
+    if (k == TK_AT) { return "@" }
+    if (k == TK_QUESTION) { return "?" }
+    if (k == TK_QUESTION_DOT) { return "?." }
+    if (k == TK_QUESTION_COLON) { return "?:" }
+    if (k == TK_EOF) { return "EOF" }
+    return "Error(" + tok.text + ")"
+}
+
+runLexFile(path: String): String {
+    var src = io.readFile(path)
+    var tokens = tokenizeSource(src)
+    var out = ""
+    var i = 0
+    while (i < tokens.len()) {
+        var tok: Token = tokens.get(i)
+        out = out + tokenDisplay(tok) + "\n"
+        i = i + 1
+    }
+    return out
+}
+
+runLexerTests(testDir: String): Bool {
+    var allPass = true
+    var dirSrc = io.readFile(testDir + "/.listing")
+    if (dirSrc == "") {
+        io.println("no se pudo abrir el directorio de tests: " + testDir)
+        return false
+    }
+    return allPass
+}
+
+dumpType(ty: String): String {
+    return ty
+}
+
+dumpIndent(depth: Int): String {
+    var s = ""
+    var i = 0
+    while (i < depth) {
+        s = s + "  "
+        i = i + 1
+    }
+    return s
+}
+
+dumpExpr(expr: Expr, depth: Int): String {
+    var ind = dumpIndent(depth)
+    if (expr.kind == EXPR_INT) {
+        return ind + "Int(" + expr.int_val.toString() + ")\n"
+    }
+    if (expr.kind == EXPR_FLOAT) {
+        return ind + "Float(" + expr.float_val + ")\n"
+    }
+    if (expr.kind == EXPR_STRING) {
+        return ind + "String(\"" + expr.str_val + "\")\n"
+    }
+    if (expr.kind == EXPR_CHAR) {
+        return ind + "Char('" + expr.char_val + "')\n"
+    }
+    if (expr.kind == EXPR_BOOL) {
+        if (expr.bool_val) {
+            return ind + "Bool(true)\n"
+        }
+        return ind + "Bool(false)\n"
+    }
+    if (expr.kind == EXPR_NULL) {
+        return ind + "Null\n"
+    }
+    if (expr.kind == EXPR_THIS) {
+        return ind + "This\n"
+    }
+    if (expr.kind == EXPR_PATH) {
+        var parts: List = expr.path_parts
+        var joined = ""
+        var i = 0
+        while (i < parts.len()) {
+            if (i > 0) {
+                joined = joined + "."
+            }
+            var p: String = parts.get(i)
+            joined = joined + p
+            i = i + 1
+        }
+        return ind + "Path(" + joined + ")\n"
+    }
+    if (expr.kind == EXPR_UNARY) {
+        var opStr = opToStr(expr.op)
+        var inner = dumpExpr(expr.left!, depth + 1)
+        return ind + "Unary(" + opStr + ")\n" + inner
+    }
+    if (expr.kind == EXPR_BINARY) {
+        var opStr2 = opToStr(expr.op)
+        var l = dumpExpr(expr.left!, depth + 1)
+        var r = dumpExpr(expr.right!, depth + 1)
+        return ind + "Binary(" + opStr2 + ")\n" + l + r
+    }
+    if (expr.kind == EXPR_CALL) {
+        var calleeStr = dumpExpr(expr.callee!, depth + 1)
+        var argsStr = dumpCallArgs(expr.args, depth + 1)
+        return ind + "Call\n" + calleeStr + argsStr
+    }
+    if (expr.kind == EXPR_METHOD) {
+        var recvStr = dumpExpr(expr.receiver!, depth + 1)
+        var argsStr2 = dumpCallArgs(expr.args, depth + 1)
+        return ind + "MethodCall(" + expr.method_name + ")\n" + recvStr + argsStr2
+    }
+    if (expr.kind == EXPR_FIELD) {
+        if (expr.is_safe) {
+            var recvStr2 = dumpExpr(expr.receiver!, depth + 1)
+            return ind + "SafeFieldAccess(" + expr.field_name + ")\n" + recvStr2
+        }
+        var recvStr3 = dumpExpr(expr.receiver!, depth + 1)
+        return ind + "FieldAccess(" + expr.field_name + ")\n" + recvStr3
+    }
+    if (expr.kind == EXPR_INDEX) {
+        var baseStr = dumpExpr(expr.left!, depth + 1)
+        var idxStr = dumpExpr(expr.right!, depth + 1)
+        return ind + "Index\n" + baseStr + idxStr
+    }
+    if (expr.kind == EXPR_NULL_ASSERT) {
+        var innerStr = dumpExpr(expr.left!, depth + 1)
+        return ind + "NullAssert\n" + innerStr
+    }
+    if (expr.kind == EXPR_ELVIS) {
+        var lStr = dumpExpr(expr.left!, depth + 1)
+        var rStr = dumpExpr(expr.right!, depth + 1)
+        return ind + "Elvis\n" + lStr + rStr
+    }
+    if (expr.kind == EXPR_LAMBDA) {
+        var params: List = expr.lambda_params
+        var paramStr = ""
+        var j = 0
+        while (j < params.len()) {
+            if (j > 0) { paramStr = paramStr + ", " }
+            var p: String = params.get(j)
+            paramStr = paramStr + p
+            j = j + 1
+        }
+        var bodyStr = dumpExpr(expr.left!, depth + 1)
+        return ind + "Lambda(" + paramStr + ")\n" + bodyStr
+    }
+    if (expr.kind == EXPR_LIST) {
+        var elemsStr = ""
+        var k = 0
+        while (k < expr.elems.len()) {
+            var e: Expr = expr.elems.get(k)
+            elemsStr = elemsStr + dumpExpr(e, depth + 1)
+            k = k + 1
+        }
+        return ind + "ListLit\n" + elemsStr
+    }
+    return ind + "Expr(?)\n"
+}
+
+dumpCallArgs(args: List, depth: Int): String {
+    var out = ""
+    var i = 0
+    while (i < args.len()) {
+        var arg: CallArg = args.get(i)
+        if (arg.kind == CALL_NAMED) {
+            out = out + dumpIndent(depth) + "NamedArg(" + arg.label + ")\n"
+            if (arg.val != null) {
+                out = out + dumpExpr(arg.val!, depth + 1)
+            }
+        } else {
+            if (arg.val != null) {
+                out = out + dumpExpr(arg.val!, depth)
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+opToStr(op: Int): String {
+    if (op == OP_ADD) { return "Add" }
+    if (op == OP_SUB) { return "Sub" }
+    if (op == OP_MUL) { return "Mul" }
+    if (op == OP_DIV) { return "Div" }
+    if (op == OP_MOD) { return "Mod" }
+    if (op == OP_EQ) { return "Eq" }
+    if (op == OP_NE) { return "Ne" }
+    if (op == OP_LT) { return "Lt" }
+    if (op == OP_LE) { return "Le" }
+    if (op == OP_GT) { return "Gt" }
+    if (op == OP_GE) { return "Ge" }
+    if (op == OP_AND) { return "And" }
+    if (op == OP_OR) { return "Or" }
+    if (op == OP_NOT) { return "Not" }
+    if (op == OP_NEG) { return "Neg" }
+    return "?"
+}
+
+dumpStmt(stmt: Stmt, depth: Int): String {
+    var ind = dumpIndent(depth)
+    if (stmt.kind == STMT_VAR) {
+        var kw = "var"
+        if (stmt.is_final) {
+            kw = "final"
+        }
+        var tyStr = ""
+        if (stmt.var_type != "") {
+            tyStr = ": " + stmt.var_type
+        }
+        var out = ind + "Var(" + kw + " " + stmt.var_name + tyStr + ")\n"
+        if (stmt.init_val != null) {
+            out = out + dumpExpr(stmt.init_val!, depth + 1)
+        }
+        return out
+    }
+    if (stmt.kind == STMT_RETURN) {
+        var out2 = ind + "Return\n"
+        if (stmt.init_val != null) {
+            out2 = out2 + dumpExpr(stmt.init_val!, depth + 1)
+        }
+        return out2
+    }
+    if (stmt.kind == STMT_BREAK) {
+        return ind + "Break\n"
+    }
+    if (stmt.kind == STMT_CONTINUE) {
+        return ind + "Continue\n"
+    }
+    if (stmt.kind == STMT_IF) {
+        var condStr = dumpExpr(stmt.cond!, depth + 1)
+        var thenStr = dumpBlock(stmt.then_stmts, depth + 1)
+        var out3 = ind + "If\n" + condStr + thenStr
+        if (stmt.else_stmts.len() > 0) {
+            var first: Stmt = stmt.else_stmts.get(0)
+            if (first.kind == STMT_IF && stmt.else_stmts.len() == 1) {
+                out3 = out3 + dumpIndent(depth) + "ElseIf\n"
+                out3 = out3 + dumpStmt(first, depth + 1)
+            } else {
+                out3 = out3 + dumpIndent(depth) + "Else\n"
+                out3 = out3 + dumpBlock(stmt.else_stmts, depth + 1)
+            }
+        }
+        return out3
+    }
+    if (stmt.kind == STMT_WHILE) {
+        var condStr2 = dumpExpr(stmt.cond!, depth + 1)
+        var bodyStr = dumpBlock(stmt.body_stmts, depth + 1)
+        return ind + "While\n" + condStr2 + bodyStr
+    }
+    if (stmt.kind == STMT_FOR) {
+        var iterStr = dumpExpr(stmt.iterable!, depth + 1)
+        var bodyStr2 = dumpBlock(stmt.body_stmts, depth + 1)
+        return ind + "For(" + stmt.for_var + ")\n" + iterStr + bodyStr2
+    }
+    if (stmt.kind == STMT_SWITCH) {
+        var subjStr = dumpExpr(stmt.switch_subject!, depth + 1)
+        var armsStr = ""
+        var si = 0
+        while (si < stmt.switch_arms.len()) {
+            var arm: SwitchArm = stmt.switch_arms.get(si)
+            if (arm.is_default) {
+                armsStr = armsStr + dumpIndent(depth + 1) + "Default\n"
+            } else {
+                armsStr = armsStr + dumpIndent(depth + 1) + "Case\n"
+                if (arm.pattern != null) {
+                    armsStr = armsStr + dumpExpr(arm.pattern!, depth + 2)
+                }
+            }
+            armsStr = armsStr + dumpBlock(arm.stmts, depth + 2)
+            si = si + 1
+        }
+        return ind + "Switch\n" + subjStr + armsStr
+    }
+    if (stmt.kind == STMT_TRY) {
+        var tryStr = dumpBlock(stmt.then_stmts, depth + 1)
+        var catchStr = dumpBlock(stmt.else_stmts, depth + 1)
+        return ind + "Try(" + stmt.for_var + ")\n" + tryStr + dumpIndent(depth) + "Catch\n" + catchStr
+    }
+    if (stmt.kind == STMT_THROW) {
+        return ind + "Throw\n"
+    }
+    if (stmt.kind == STMT_EXPR) {
+        if (stmt.assign_val != null) {
+            var lhsStr = dumpExpr(stmt.expr!, depth + 1)
+            var rhsStr = dumpExpr(stmt.assign_val!, depth + 1)
+            return ind + "Assign\n" + lhsStr + rhsStr
+        }
+        var eStr = dumpExpr(stmt.expr!, depth + 1)
+        return ind + "ExprStmt\n" + eStr
+    }
+    return ind + "Stmt(?)\n"
+}
+
+dumpBlock(stmts: List, depth: Int): String {
+    var out = dumpIndent(depth - 1) + "Block\n"
+    var i = 0
+    while (i < stmts.len()) {
+        var s: Stmt = stmts.get(i)
+        out = out + dumpStmt(s, depth)
+        i = i + 1
+    }
+    return out
+}
+
+dumpFunction(fn: Function, depth: Int): String {
+    var ind = dumpIndent(depth)
+    var annStr = ""
+    var ai = 0
+    while (ai < fn.annotations.len()) {
+        var ann: Param = fn.annotations.get(ai)
+        annStr = annStr + "@" + ann.name + " "
+        ai = ai + 1
+    }
+    var retStr = ""
+    if (fn.return_type != "") {
+        retStr = ": " + fn.return_type
+    }
+    var paramParts: List = List()
+    var pi = 0
+    while (pi < fn.params.len()) {
+        var p: Param = fn.params.get(pi)
+        paramParts.push(p.name + ": " + p.ty)
+        pi = pi + 1
+    }
+    var paramsStr = joinStrings(paramParts, ", ")
+    var out = ind + annStr + "fn " + fn.name + "(" + paramsStr + ")" + retStr + "\n"
+    if (fn.is_block_body) {
+        out = out + dumpBlock(fn.stmts, depth + 1)
+    } else {
+        if (fn.body_expr != null) {
+            out = out + dumpIndent(depth + 1) + "ExprBody\n"
+            out = out + dumpExpr(fn.body_expr!, depth + 2)
+        }
+    }
+    return out
+}
+
+joinStrings(parts: List, sep: String): String {
+    var out = ""
+    var i = 0
+    while (i < parts.len()) {
+        if (i > 0) {
+            out = out + sep
+        }
+        var p: String = parts.get(i)
+        out = out + p
+        i = i + 1
+    }
+    return out
+}
+
+dumpItem(item: Item, depth: Int): String {
+    var ind = dumpIndent(depth)
+    if (item.kind == ITEM_MODULE) {
+        return ind + "ModuleDecl(" + item.module_path + ")\n"
+    }
+    if (item.kind == ITEM_IMPORT) {
+        return ind + "ImportDecl(" + item.import_path + ")\n"
+    }
+    if (item.kind == ITEM_DATA) {
+        var d: DataDecl = item.data_decl!
+        var out = ind + "DataDecl(" + d.name + ")\n"
+        var fi = 0
+        while (fi < d.fields.len()) {
+            var f: FieldDecl = d.fields.get(fi)
+            out = out + dumpIndent(depth) + "  Field(" + f.name + ": " + f.ty + ")\n"
+            fi = fi + 1
+        }
+        return out
+    }
+    if (item.kind == ITEM_CLASS) {
+        var c: ClassDecl = item.class_decl!
+        var annStr = ""
+        var ai = 0
+        while (ai < c.annotations.len()) {
+            var ann: Param = c.annotations.get(ai)
+            annStr = annStr + "@" + ann.name + " "
+            ai = ai + 1
+        }
+        var out2 = ind + annStr + "ClassDecl(" + c.name + ")\n"
+        var ppi = 0
+        while (ppi < c.primary_params.len()) {
+            var pp: FieldDecl = c.primary_params.get(ppi)
+            out2 = out2 + dumpIndent(depth) + "  PrimaryParam(" + pp.name + ": " + pp.ty + ")\n"
+            ppi = ppi + 1
+        }
+        var fli = 0
+        while (fli < c.fields.len()) {
+            var cf: FieldDecl = c.fields.get(fli)
+            out2 = out2 + dumpIndent(depth) + "  Field(" + cf.name + ": " + cf.ty + ")\n"
+            fli = fli + 1
+        }
+        var mi = 0
+        while (mi < c.methods.len()) {
+            var m: Function = c.methods.get(mi)
+            out2 = out2 + dumpFunction(m, depth + 1)
+            mi = mi + 1
+        }
+        return out2
+    }
+    if (item.kind == ITEM_INTERFACE) {
+        var iface: InterfaceDecl = item.interface_decl!
+        var out3 = ind + "InterfaceDecl(" + iface.name + ")\n"
+        var msi = 0
+        while (msi < iface.method_sigs.len()) {
+            var ms: Param = iface.method_sigs.get(msi)
+            out3 = out3 + dumpIndent(depth) + "  Abstract " + ms.name + "()\n"
+            msi = msi + 1
+        }
+        return out3
+    }
+    if (item.kind == ITEM_FUNCTION) {
+        var fn2: Function = item.function_decl!
+        return dumpFunction(fn2, depth)
+    }
+    if (item.kind == ITEM_GLOBAL) {
+        var g: GlobalConst = item.global_const!
+        var kw2 = "var"
+        if (g.is_final) {
+            kw2 = "final"
+        }
+        var tyStr2 = ""
+        if (g.ty != "") {
+            tyStr2 = ": " + g.ty
+        }
+        return ind + "GlobalConst(" + kw2 + " " + g.name + tyStr2 + ")\n"
+    }
+    return ind + "Item(?)\n"
+}
+
+dumpProgram(prog: Program): String {
+    var out = "Program\n"
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        out = out + dumpItem(item, 1)
+        i = i + 1
+    }
+    return out
+}
+
+parseAndDumpFile(path: String): String {
+    var src = io.readFile(path)
+    var tokens = tokenizeSource(src)
+    var prog = parseSource(tokens)
+    return dumpProgram(prog)
+}
+
+appendDirNxItems(allItems: List, dirPath: String, skipFile: String): Void {
+    var files: List = nx_list_dir(dirPath)
+    var sorted: List = sortStringList(files)
+    var i = 0
+    while (i < sorted.len()) {
+        var name: String = sorted.get(i)
+        if (skipFile != "" && name == skipFile) {
+            i = i + 1
+            continue
+        }
+        if (name.endsWith(".nx")) {
+            var path = dirPath + "/" + name
+            var src = io.readFile(path)
+            var toks = tokenizeSource(src)
+            var prog = parseSource(toks)
+            var j = 0
+            while (j < prog.items.len()) {
+                var item: Item = prog.items.get(j)
+                allItems.push(item)
+                j = j + 1
+            }
+        }
+        i = i + 1
+    }
+}
+
+parseDirNx(dirPath: String): Program {
+    var allItems: List = List()
+    appendDirNxItems(allItems, dirPath, "")
+    return Program(items: allItems, parse_errors: List())
+}
+
+parseDirNxSkip(dirPath: String, skipFile: String): Program {
+    var allItems: List = List()
+    appendDirNxItems(allItems, dirPath, skipFile)
+    return Program(items: allItems, parse_errors: List())
+}
+
+parseLspProgram(): Program {
+    var allItems: List = List()
+    appendDirNxItems(allItems, "compiler/src", "main.nx")
+    appendDirNxItems(allItems, "nx/std/json", "")
+    appendDirNxItems(allItems, "nx/lsp", "")
+    appendDirNxItems(allItems, "nx/lsp/features", "")
+    return Program(items: allItems, parse_errors: List())
+}
+
+sortStringList(lst: List): List {
+    var n = lst.len()
+    var sorted: List = List()
+    var i = 0
+    while (i < n) {
+        var s: String = lst.get(i)
+        sorted.push(s)
+        i = i + 1
+    }
+    var i2 = 0
+    while (i2 < n) {
+        var j = i2 + 1
+        while (j < n) {
+            var a: String = sorted.get(i2)
+            var b: String = sorted.get(j)
+            if (nx_string_lt(b, a)) {
+                sorted.set(i2, b)
+                sorted.set(j, a)
+            }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+    return sorted
+}
+
+compileFile(inputPath: String, outputPath: String): Void {
+    var src: String = io.readFile(inputPath)
+    var tokens: List = tokenizeSource(src)
+    var parsed: Program = parseSource(tokens)
+    var prog: Program = expandProgramImports(parsed)
+    var ctx: SemaCtx = checkProgram(prog)
+    var cCode: String = generateC(prog, ctx)
+    var cPath: String = outputPath + ".c"
+    io.writeFile(cPath, cCode)
+    nx_compile_c(cPath, outputPath)
+}
+
+compileDirPath(dirPath: String, outputPath: String): Void {
+    var prog: Program = parseDirNx(dirPath)
+    var ctx: SemaCtx = checkProgram(prog)
+    var cCode: String = generateC(prog, ctx)
+    var cPath: String = outputPath + ".c"
+    io.writeFile(cPath, cCode)
+    nx_compile_c(cPath, outputPath)
+}
+
+parseFileNx(path: String): Program {
+    var src: String = io.readFile(path)
+    var tokens: List = tokenizeSource(src)
+    return parseSource(tokens)
+}
+
+mergePrograms(left: Program, right: Program): Program {
+    var allItems: List = List()
+    var i = 0
+    while (i < left.items.len()) {
+        var item: Item = left.items.get(i)
+        allItems.push(item)
+        i = i + 1
+    }
+    var j = 0
+    while (j < right.items.len()) {
+        var item2: Item = right.items.get(j)
+        allItems.push(item2)
+        j = j + 1
+    }
+    var allErrors = List()
+    var pe = 0
+    while (pe < left.parse_errors.len()) {
+        allErrors.push(left.parse_errors.get(pe))
+        pe = pe + 1
+    }
+    var pe2 = 0
+    while (pe2 < right.parse_errors.len()) {
+        allErrors.push(right.parse_errors.get(pe2))
+        pe2 = pe2 + 1
+    }
+    return Program(items: allItems, parse_errors: allErrors)
+}
+
+compileProgram(prog: Program, outputPath: String): Void {
+    var expanded: Program = expandProgramImports(prog)
+    var ctx: SemaCtx = checkProgram(expanded)
+    var cCode: String = generateC(expanded, ctx)
+    var cPath: String = outputPath + ".c"
+    io.writeFile(cPath, cCode)
+    nx_compile_c(cPath, outputPath)
+}
+
+compileJsonTest(libDir: String, testPath: String, outputPath: String): Void {
+    var libProg: Program = parseDirNx(libDir)
+    var testProg: Program = parseFileNx(testPath)
+    var merged: Program = mergePrograms(libProg, testProg)
+    compileProgram(merged, outputPath)
+}
+
+compileLspPath(outputPath: String): Void {
+    var prog: Program = parseLspProgram()
+    var ctx: SemaCtx = checkProgram(prog)
+    var cCode: String = generateC(prog, ctx)
+    var cPath: String = outputPath + ".c"
+    io.writeFile(cPath, cCode)
+    nx_compile_c(cPath, outputPath)
+}
+
+main(): Void {
+    var argc: Int = nx_get_arg_count()
+    if (argc < 2) {
+        io.println("Nexus Stage 1 Compiler")
+        return
+    }
+    var cmd: String = nx_get_arg(1)
+    if (cmd == "test-lexer") {
+        var dir: String = "tests/lexer"
+        if (argc >= 3) {
+            dir = nx_get_arg(2)
+        }
+        var passed: Bool = runLexerTestsImpl(dir)
+        if (passed) {
+            io.println("Todos los tests de lexer pasaron.")
+        } else {
+            io.println("Algunos tests de lexer fallaron.")
+            nx_exit(1)
+        }
+        return
+    }
+    if (cmd == "test-parser") {
+        var dir2: String = "tests/parser"
+        if (argc >= 3) {
+            dir2 = nx_get_arg(2)
+        }
+        var passed2: Bool = runParserTestsImpl(dir2)
+        if (passed2) {
+            io.println("Todos los tests de parser pasaron.")
+        } else {
+            io.println("Algunos tests de parser fallaron.")
+            nx_exit(1)
+        }
+        return
+    }
+    if (cmd == "test-sema") {
+        var dir3: String = "tests/sema"
+        if (argc >= 3) {
+            dir3 = nx_get_arg(2)
+        }
+        var passed3: Bool = runSemaTestsImpl(dir3)
+        if (passed3) {
+            io.println("Todos los tests de sema pasaron.")
+        } else {
+            io.println("Algunos tests de sema fallaron.")
+            nx_exit(1)
+        }
+        return
+    }
+    if (cmd == "compile") {
+        if (argc < 3) {
+            io.println("uso: nxc compile <archivo.nx> [salida]")
+            nx_exit(1)
+        }
+        var input: String = nx_get_arg(2)
+        var output: String = "a.out"
+        if (argc >= 4) {
+            output = nx_get_arg(3)
+        }
+        compileFile(input, output)
+        return
+    }
+    if (cmd == "compile-dir") {
+        if (argc < 3) {
+            io.println("uso: nxc compile-dir <directorio> [salida]")
+            nx_exit(1)
+        }
+        var dirInput: String = nx_get_arg(2)
+        var outputBin: String = "a.out"
+        if (argc >= 4) {
+            outputBin = nx_get_arg(3)
+        }
+        compileDirPath(dirInput, outputBin)
+        return
+    }
+    if (cmd == "test-e2e") {
+        var e2eDir: String = "tests/e2e"
+        if (argc >= 3) {
+            e2eDir = nx_get_arg(2)
+        }
+        var passedE2e: Bool = runE2eTestsImpl(e2eDir)
+        if (passedE2e) {
+            io.println("Todos los tests e2e pasaron.")
+        } else {
+            io.println("Algunos tests e2e fallaron.")
+            nx_exit(1)
+        }
+        return
+    }
+    if (cmd == "test-json") {
+        var jsonDir: String = "tests/json"
+        if (argc >= 3) {
+            jsonDir = nx_get_arg(2)
+        }
+        var passedJson: Bool = runJsonTestsImpl(jsonDir)
+        if (passedJson) {
+            io.println("Todos los tests json pasaron.")
+        } else {
+            io.println("Algunos tests json fallaron.")
+            nx_exit(1)
+        }
+        return
+    }
+    if (cmd == "test-std") {
+        var stdDir: String = "tests/std"
+        if (argc >= 3) {
+            stdDir = nx_get_arg(2)
+        }
+        var passedStd: Bool = runStdTestsImpl(stdDir)
+        if (passedStd) {
+            io.println("Todos los tests std pasaron.")
+        } else {
+            io.println("Algunos tests std fallaron.")
+            nx_exit(1)
+        }
+        return
+    }
+    if (cmd == "compile-lsp") {
+        var lspOut: String = "build/nexus-lsp"
+        if (argc >= 3) {
+            lspOut = nx_get_arg(2)
+        }
+        compileLspPath(lspOut)
+        return
+    }
+    io.println("comando desconocido: " + cmd)
+    nx_exit(1)
+}
+
+runLexerTestsImpl(testDir: String): Bool {
+    var listing: List = nx_list_dir(testDir)
+    var allPass: Bool = true
+    var i: Int = 0
+    while (i < listing.len()) {
+        var name: String = listing.get(i)
+        if (name.endsWith(".nx")) {
+            var nxPath = testDir + "/" + name
+            var base = name.substring(0, name.length() - 3)
+            var tokPath = testDir + "/" + base + ".tokens"
+            var expected = io.readFile(tokPath)
+            var got = runLexFile(nxPath)
+            if (got == expected) {
+                io.println("PASS lexer: " + nxPath)
+            } else {
+                io.println("FAIL lexer: " + nxPath)
+                allPass = false
+            }
+        }
+        i = i + 1
+    }
+    return allPass
+}
+
+runParserTestsImpl(testDir: String): Bool {
+    var listing2: List = nx_list_dir(testDir)
+    var allPass2: Bool = true
+    var i2: Int = 0
+    while (i2 < listing2.len()) {
+        var name2: String = listing2.get(i2)
+        if (name2.endsWith(".nx")) {
+            var nxPath2 = testDir + "/" + name2
+            var base2 = name2.substring(0, name2.length() - 3)
+            var astPath = testDir + "/" + base2 + ".ast"
+            var expected2 = io.readFile(astPath)
+            var got2 = parseAndDumpFile(nxPath2)
+            if (got2 == expected2) {
+                io.println("PASS parser: " + nxPath2)
+            } else {
+                io.println("FAIL parser: " + nxPath2)
+                allPass2 = false
+            }
+        }
+        i2 = i2 + 1
+    }
+    return allPass2
+}
+
+runE2eTestsImpl(testDir: String): Bool {
+    var listing4: List = nx_list_dir(testDir)
+    var allPass4: Bool = true
+    var i4: Int = 0
+    while (i4 < listing4.len()) {
+        var name4: String = listing4.get(i4)
+        if (name4.endsWith(".nx")) {
+            var nxPath4: String = testDir + "/" + name4
+            var base4: String = name4.substring(0, name4.length() - 3)
+            var expPath: String = testDir + "/" + base4 + ".expected"
+            var expected4: String = io.readFile(expPath)
+            var binPath: String = testDir + "/" + base4 + ".out"
+            compileFile(nxPath4, binPath)
+            var got4: String = nx_run_binary_capture(binPath)
+            if (got4 == expected4) {
+                io.println("PASS e2e: " + nxPath4)
+            } else {
+                io.println("FAIL e2e: " + nxPath4)
+                allPass4 = false
+            }
+        }
+        i4 = i4 + 1
+    }
+    return allPass4
+}
+
+runJsonTestsImpl(testDir: String): Bool {
+    var libDir: String = "nx/std/json"
+    var listing5: List = nx_list_dir(testDir)
+    var allPass5: Bool = true
+    var i5: Int = 0
+    while (i5 < listing5.len()) {
+        var name5: String = listing5.get(i5)
+        if (name5.endsWith(".nx")) {
+            var nxPath5: String = testDir + "/" + name5
+            var base5: String = name5.substring(0, name5.length() - 3)
+            var expPath5: String = testDir + "/" + base5 + ".expected"
+            var expected5: String = io.readFile(expPath5)
+            var binPath5: String = testDir + "/" + base5 + ".out"
+            compileJsonTest(libDir, nxPath5, binPath5)
+            var got5: String = nx_run_binary_capture(binPath5)
+            if (got5 == expected5) {
+                io.println("PASS json: " + nxPath5)
+            } else {
+                io.println("FAIL json: " + nxPath5)
+                allPass5 = false
+            }
+        }
+        i5 = i5 + 1
+    }
+    return allPass5
+}
+
+runStdTestsImpl(testDir: String): Bool {
+    var listing6: List = nx_list_dir(testDir)
+    var allPass6: Bool = true
+    var i6: Int = 0
+    while (i6 < listing6.len()) {
+        var name6: String = listing6.get(i6)
+        if (name6.endsWith(".nx")) {
+            var nxPath6: String = testDir + "/" + name6
+            var base6: String = name6.substring(0, name6.length() - 3)
+            var expPath6: String = testDir + "/" + base6 + ".expected"
+            var expected6: String = io.readFile(expPath6)
+            var binPath6: String = testDir + "/" + base6 + ".out"
+            compileFile(nxPath6, binPath6)
+            var got6: String = nx_run_binary_capture(binPath6)
+            if (got6 == expected6) {
+                io.println("PASS std: " + nxPath6)
+            } else {
+                io.println("FAIL std: " + nxPath6)
+                allPass6 = false
+            }
+        }
+        i6 = i6 + 1
+    }
+    return allPass6
+}
+
+runSemaTestsImpl(testDir: String): Bool {
+    var listing3: List = nx_list_dir(testDir)
+    var allPass3: Bool = true
+    var i3: Int = 0
+    while (i3 < listing3.len()) {
+        var name3: String = listing3.get(i3)
+        if (name3.endsWith(".nx")) {
+            var nxPath3 = testDir + "/" + name3
+            var isInvalid = name3.startsWith("invalid_")
+            var src3 = io.readFile(nxPath3)
+            var tokens3 = tokenizeSource(src3)
+            var prog3 = parseSource(tokens3)
+            var ctx3 = checkProgram(prog3)
+            if (ctx3.errors.len() > 0) {
+                if (isInvalid) {
+                    io.println("PASS sema (invalid): " + nxPath3)
+                } else {
+                    io.println("FAIL sema: " + nxPath3)
+                    allPass3 = false
+                }
+            } else {
+                if (isInvalid) {
+                    io.println("FAIL sema (invalid, esperaba error): " + nxPath3)
+                    allPass3 = false
+                } else {
+                    io.println("PASS sema: " + nxPath3)
+                }
+            }
+        }
+        i3 = i3 + 1
+    }
+    return allPass3
+}

@@ -1,0 +1,53 @@
+sortTreeSetKeys(lst: List): List {
+    var n = lst.len()
+    var sorted: List = List()
+    var i = 0
+    while (i < n) {
+        var item: String = lst.get(i)
+        sorted.push(item)
+        i = i + 1
+    }
+    var i2 = 0
+    while (i2 < n) {
+        var j = i2 + 1
+        while (j < n) {
+            var a: String = sorted.get(i2)
+            var b: String = sorted.get(j)
+            if (nx_string_lt(b, a)) {
+                sorted.set(i2, b)
+                sorted.set(j, a)
+            }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+    return sorted
+}
+
+class TreeSet(sortedKeys: List, members: Map) {
+
+    size(): Int {
+        return this.sortedKeys.len()
+    }
+
+    isEmpty(): Bool {
+        return this.sortedKeys.len() == 0
+    }
+
+    add(key: String): Void {
+        if (this.members.contains(key)) {
+            return
+        }
+        this.sortedKeys.push(key)
+        this.sortedKeys = sortTreeSetKeys(this.sortedKeys)
+        this.members.insert(key, true)
+    }
+
+    contains(key: String): Bool {
+        return this.members.contains(key)
+    }
+
+    keyAt(index: Int): String {
+        return this.sortedKeys.get(index)
+    }
+}

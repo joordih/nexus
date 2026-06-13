@@ -1,0 +1,5 @@
+﻿import compiler.ast
+
+test(): Void {
+    var x = ITEM_FUNCTION
+}

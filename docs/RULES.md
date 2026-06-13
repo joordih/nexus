@@ -1,10 +1,10 @@
 # Reglas del proyecto Nexus
 
-Este documento es vinculante para cualquier desarrollador que trabaje en este repositorio. No son recomendaciones. `PLAN.md` describe qué se construye y en qué orden; este fichero describe cómo se trabaja. Ante cualquier duda sobre si una acción está permitida, la respuesta por defecto es no actuar y registrar la duda en `NOTES.md`.
+Este documento es vinculante para cualquier desarrollador que trabaje en este repositorio. No son recomendaciones. `PLAN.md` resume arquitectura, estado y hoja de ruta; este fichero describe cómo se trabaja. Ante cualquier duda sobre si una acción está permitida, la respuesta por defecto es no actuar y registrar la duda en `NOTES.md`.
 
 ## Disciplina de fases
 
-El trabajo avanza por las fases definidas en el README, en orden, sin solaparse.
+El trabajo avanza por fases cerradas con pruebas verdes, sin solapar trabajo de etapas futuras. El historial de fases y el roadmap están en `PLAN.md` y `NOTES.md`.
 
 No se empieza una fase hasta que la anterior está cerrada. Una fase no está cerrada porque el código parezca terminado ni porque compile: está cerrada cuando su puerta de salida está verde y confirmada en un commit. La puerta de salida de cada fase está definida en el README y es la única autoridad sobre si la fase termina.
 
@@ -36,7 +36,7 @@ Conviene precisar qué no es un comentario y por tanto está permitido, porque s
 
 ### Sin emojis
 
-No se usan emojis en ningún sitio: ni en código, ni en `SPEC.md`, `GRAMMAR.md`, `README.md` o `NOTES.md`, ni en mensajes de commit, ni en la salida de los programas o de las herramientas.
+No se usan emojis en ningún sitio: ni en código, ni en los documentos de `docs/`, ni en `README.md`, ni en mensajes de commit, ni en la salida de los programas o de las herramientas.
 
 ### Nombres
 
@@ -89,17 +89,6 @@ El toolchain necesario está en el README: Rust estable para la Etapa 0, un comp
 Hasta que el compilador se autoaloja y se cierran las fases que amplían el lenguaje, el código del compilador escrito en Nexus usa exclusivamente Nexus Core, el subconjunto definido en el README y en `GRAMMAR.md`. No se usa una característica del lenguaje antes de que su fase la haya implementado y cerrado.
 
 Esta es la regla que más fácil es romper por descuido durante las primeras fases. La tentación de usar genéricos del usuario, un cierre o un bucle `for` antes de tiempo aparecerá. La respuesta es la misma siempre: esa característica entra en su fase, con su puerta, y solo entonces el compilador puede apoyarse en ella.
-
-## Verificación automatizada
-
-Las reglas que pueden comprobarse con una máquina deben comprobarse con una máquina, no confiarse a la revisión manual. El repositorio debe disponer de una verificación que, como mínimo:
-
-- Rechace la presencia de sintaxis de comentario `//` y `/* */` en los ficheros de código.
-- Rechace la presencia de emojis en código y documentación.
-- Ejecute la suite de pruebas.
-- A partir de la Fase 6, ejecute `make verify-bootstrap` y falle si la Etapa 2 y la Etapa 3 no son idénticas.
-
-La comprobación de comentarios apunta a la sintaxis de comentario de forma precisa, de modo que no marque por error las directivas de preprocesador de C ni los atributos de Rust, que son código permitido.
 
 ## Resumen
 

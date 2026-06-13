@@ -1,0 +1,10 @@
+epochSeconds(): Int {
+    return nx_time_now()
+}
+
+class RuntimeInfo() {
+
+    nowEpoch(): Int {
+        return epochSeconds()
+    }
+}

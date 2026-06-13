@@ -1,0 +1,23 @@
+import std.io
+
+parseTcpPortArg(arg: String): Int {
+    var prefix = "--tcp="
+    if (!arg.startsWith(prefix)) {
+        return 0
+    }
+    var numStr = arg.substring(prefix.length(), arg.length())
+    return numStr.toInt()
+}
+
+main(): Void {
+    var argc = nx_get_arg_count()
+    if (argc >= 2) {
+        var arg = nx_get_arg(1)
+        var port = parseTcpPortArg(arg)
+        if (port > 0) {
+            startTcpServer(port)
+            return
+        }
+    }
+    runLspServerStdio()
+}

@@ -1,0 +1,10 @@
+getEnv(name: String): String {
+    return nx_getenv(name)
+}
+
+class Environment() {
+
+    lookup(name: String): String {
+        return getEnv(name)
+    }
+}

@@ -1,0 +1,17 @@
+class DirectoryStream(dirPath: String, names: List, index: Int) {
+
+    hasNext(): Bool {
+        return this.index < this.names.len()
+    }
+
+    nextName(): String {
+        var name = this.names.get(this.index)
+        this.index = this.index + 1
+        return name
+    }
+}
+
+openDirectoryStream(dirPath: String): DirectoryStream {
+    var listing = nx_list_dir(dirPath)
+    return DirectoryStream(dirPath: dirPath, names: listing, index: 0)
+}

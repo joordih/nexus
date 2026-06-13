@@ -1,0 +1,83 @@
+final LSP_HEADER_PREFIX: String = "Content-Length: "
+final LSP_CRLF: String = "\r\n"
+final LSP_HEADER_SEP: String = "\r\n\r\n"
+final LSP_JSONRPC_VERSION: String = "2.0"
+
+parseContentLength(headerLine: String): Int {
+    var prefixLen = LSP_HEADER_PREFIX.length()
+    if (!headerLine.startsWith(LSP_HEADER_PREFIX)) {
+        return -1
+    }
+    var numStr = headerLine.substring(prefixLen, headerLine.length())
+    return numStr.toInt()
+}
+
+readLspContentLengthStdio(): Int {
+    var contentLen = -1
+    var running = true
+    while (running) {
+        var line = nx_read_header_line()
+        if (line.length() == 0) {
+            running = false
+        } else {
+            var parsed = parseContentLength(line)
+            if (parsed >= 0) {
+                contentLen = parsed
+            }
+        }
+    }
+    return contentLen
+}
+
+readLspContentLengthFd(fd: Int): Int {
+    var contentLen = -1
+    var running = true
+    while (running) {
+        var line = nx_tcp_read_line(fd)
+        if (line.length() == 0) {
+            running = false
+        } else {
+            var parsed = parseContentLength(line)
+            if (parsed >= 0) {
+                contentLen = parsed
+            }
+        }
+    }
+    return contentLen
+}
+
+readLspMessage(): JSONValue {
+    var contentLen = readLspContentLengthStdio()
+    if (contentLen < 0) {
+        return makeJsonNull()
+    }
+    var body = nx_read_stdin_n(contentLen)
+    var parser = JSONParser(source: body, pos: 0)
+    return parser.parse()
+}
+
+writeLspMessage(msg: JSONValue): Void {
+    var writer = JSONWriter()
+    var body = writer.write(msg)
+    var header = LSP_HEADER_PREFIX + body.length().toString() + LSP_CRLF + LSP_CRLF
+    nx_write_stdout_n(header, header.length())
+    nx_write_stdout_n(body, body.length())
+}
+
+readLspMessageFromFd(fd: Int): JSONValue {
+    var contentLen = readLspContentLengthFd(fd)
+    if (contentLen < 0) {
+        return makeJsonNull()
+    }
+    var body = nx_tcp_read(fd, contentLen)
+    var parser = JSONParser(source: body, pos: 0)
+    return parser.parse()
+}
+
+writeLspMessageToFd(fd: Int, msg: JSONValue): Void {
+    var writer = JSONWriter()
+    var body = writer.write(msg)
+    var header = LSP_HEADER_PREFIX + body.length().toString() + LSP_CRLF + LSP_CRLF
+    nx_tcp_write(fd, header, header.length())
+    nx_tcp_write(fd, body, body.length())
+}

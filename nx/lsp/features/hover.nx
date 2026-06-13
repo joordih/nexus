@@ -1,0 +1,166 @@
+import compiler.ast
+
+findExprAt(prog: Program, line: Int, col: Int): Expr? {
+    var best: Expr? = null
+    var bestDist = 1000000
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        var found = findExprInItem(item, line, col, best, bestDist)
+        if (found != null) {
+            best = found
+            bestDist = exprDistance(found!, line, col)
+        }
+        i = i + 1
+    }
+    return best
+}
+
+exprDistance(expr: Expr, line: Int, col: Int): Int {
+    var dl = expr.line - line
+    if (dl < 0) {
+        dl = -dl
+    }
+    var dc = expr.col - col
+    if (dc < 0) {
+        dc = -dc
+    }
+    return dl * 1000 + dc
+}
+
+exprContains(expr: Expr, line: Int, col: Int): Bool {
+    if (expr.line != line) {
+        return false
+    }
+    return col >= expr.col
+}
+
+findExprInItem(item: Item, line: Int, col: Int, best: Expr?, bestDist: Int): Expr? {
+    if (item.kind == ITEM_FUNCTION) {
+        if (item.function_decl != null) {
+            return findExprInFunction(item.function_decl!, line, col, best, bestDist)
+        }
+    }
+    if (item.kind == ITEM_CLASS) {
+        if (item.class_decl != null) {
+            return findExprInClass(item.class_decl!, line, col, best, bestDist)
+        }
+    }
+    return best
+}
+
+findExprInFunction(fn: Function, line: Int, col: Int, best: Expr?, bestDist: Int): Expr? {
+    var result = best
+    var dist = bestDist
+    var i = 0
+    while (i < fn.stmts.len()) {
+        var stmt: Stmt = fn.stmts.get(i)
+        var found = findExprInStmt(stmt, line, col, result, dist)
+        if (found != null) {
+            result = found
+            dist = exprDistance(found!, line, col)
+        }
+        i = i + 1
+    }
+    return result
+}
+
+findExprInClass(cd: ClassDecl, line: Int, col: Int, best: Expr?, bestDist: Int): Expr? {
+    var result = best
+    var dist = bestDist
+    var i = 0
+    while (i < cd.methods.len()) {
+        var fn: Function = cd.methods.get(i)
+        var found = findExprInFunction(fn, line, col, result, dist)
+        if (found != null) {
+            result = found
+            dist = exprDistance(found!, line, col)
+        }
+        i = i + 1
+    }
+    return result
+}
+
+findExprInStmt(stmt: Stmt, line: Int, col: Int, best: Expr?, bestDist: Int): Expr? {
+    var result = best
+    var dist = bestDist
+    if (stmt.init_val != null) {
+        var found = findExprInTree(stmt.init_val!, line, col, result, dist)
+        if (found != null) {
+            result = found
+            dist = exprDistance(found!, line, col)
+        }
+    }
+    if (stmt.expr != null) {
+        var found2 = findExprInTree(stmt.expr!, line, col, result, dist)
+        if (found2 != null) {
+            result = found2
+            dist = exprDistance(found2!, line, col)
+        }
+    }
+    return result
+}
+
+findExprInTree(expr: Expr, line: Int, col: Int, best: Expr?, bestDist: Int): Expr? {
+    var result = best
+    var dist = bestDist
+    if (expr.line == line && expr.col <= col) {
+        var d = exprDistance(expr, line, col)
+        if (d < dist) {
+            result = expr
+            dist = d
+        }
+    }
+    if (expr.left != null) {
+        var f = findExprInTree(expr.left!, line, col, result, dist)
+        if (f != null) {
+            result = f
+            dist = exprDistance(f!, line, col)
+        }
+    }
+    if (expr.right != null) {
+        var f2 = findExprInTree(expr.right!, line, col, result, dist)
+        if (f2 != null) {
+            result = f2
+            dist = exprDistance(f2!, line, col)
+        }
+    }
+    if (expr.receiver != null) {
+        var f3 = findExprInTree(expr.receiver!, line, col, result, dist)
+        if (f3 != null) {
+            result = f3
+            dist = exprDistance(f3!, line, col)
+        }
+    }
+    return result
+}
+
+hoverTypeText(ctx: SemaCtx, expr: Expr): String {
+    var gen = CGen(ctx: ctx, out: "", indent: 0, tmp_counter: 0, current_class: "",
+        var_type_names: List(), var_type_vals: List())
+    var ty = gen.inferExprType(expr)
+    return nxTypeToString(ty)
+}
+
+handleHover(params: JSONValue, source: String, uri: String): JSONValue {
+    var pos = jsonGetField(params, "position")
+    var line = 0
+    var character = 0
+    if (pos != null) {
+        line = jsonGetInt(pos!, "line") + 1
+        character = jsonGetInt(pos!, "character") + 1
+    }
+    var tokens = tokenizeSource(source)
+    var prog = parseSource(tokens)
+    var ctx = analyzeSource(uri, source)
+    var expr = findExprAt(prog, line, character)
+    var typeText = "unknown"
+    if (expr != null) {
+        typeText = hoverTypeText(ctx, expr!)
+    }
+    var keys: List = List()
+    keys.push("contents")
+    var vals: List = List()
+    vals.push(makeJsonString(typeText))
+    return makeJsonObjectFromPairs(keys, vals)
+}

@@ -1,0 +1,172 @@
+import std.json.value
+import std.json.access
+
+final LSP_ERR_METHOD_NOT_FOUND: Int = -32601
+final LSP_ERR_INVALID_REQUEST: Int = -32600
+
+buildInitializeResult(): JSONValue {
+    var syncKeys: List = List()
+    syncKeys.push("openClose")
+    syncKeys.push("change")
+    var syncVals: List = List()
+    syncVals.push(makeJsonBool(true))
+    syncVals.push(makeJsonBool(true))
+    var textSync = makeJsonObjectFromPairs(syncKeys, syncVals)
+    var capKeys: List = List()
+    capKeys.push("textDocumentSync")
+    capKeys.push("completionProvider")
+    capKeys.push("hoverProvider")
+    capKeys.push("definitionProvider")
+    capKeys.push("referencesProvider")
+    capKeys.push("documentSymbolProvider")
+    var capVals: List = List()
+    capVals.push(makeJsonInt(1))
+    var compKeys: List = List()
+    compKeys.push("triggerCharacters")
+    var compVals: List = List()
+    var triggers: List = List()
+    triggers.push(makeJsonString("."))
+    triggers.push(makeJsonString(" "))
+    compVals.push(makeJsonArray(triggers))
+    capVals.push(makeJsonObjectFromPairs(compKeys, compVals))
+    capVals.push(makeJsonBool(true))
+    capVals.push(makeJsonBool(true))
+    capVals.push(makeJsonBool(true))
+    capVals.push(makeJsonBool(true))
+    var capabilities = makeJsonObjectFromPairs(capKeys, capVals)
+    var resultKeys: List = List()
+    resultKeys.push("capabilities")
+    var resultVals: List = List()
+    resultVals.push(capabilities)
+    return makeJsonObjectFromPairs(resultKeys, resultVals)
+}
+
+class LspServer(session: LspSession) {
+
+    handleMessage(msg: JSONValue): Void {
+        if (!jsonHasField(msg, "method")) {
+            return
+        }
+        var method = jsonGetString(msg, "method")
+        var params = jsonGetField(msg, "params")
+        if (params == null) {
+            var emptyMap: Map = Map()
+            params = makeJsonObject(emptyMap)
+        }
+        var idField = jsonGetField(msg, "id")
+        var hasId = idField != null
+        if (method == "initialize") {
+            var result = buildInitializeResult()
+            if (hasId) {
+                this.session.writeMessage(jsonRpcResult(idField!, result))
+            }
+            return
+        }
+        if (method == "initialized") {
+            return
+        }
+        if (method == "shutdown") {
+            if (hasId) {
+                this.session.writeMessage(jsonRpcResult(idField!, makeJsonNull()))
+            }
+            return
+        }
+        if (method == "exit") {
+            nx_exit(0)
+        }
+        if (method == "textDocument/didOpen") {
+            var uri = extractUri(params!)
+            var text = extractFullText(params!)
+            this.session.docs.set(uri, text)
+            var diag = publishDiagnostics(uri, text)
+            this.session.writeMessage(diag)
+            return
+        }
+        if (method == "textDocument/didChange") {
+            var uri2 = extractUri(params!)
+            var text2 = extractChangeText(params!)
+            if (text2 != "") {
+                this.session.docs.set(uri2, text2)
+            }
+            var src = this.session.docs.get(uri2)
+            var diag2 = publishDiagnostics(uri2, src)
+            this.session.writeMessage(diag2)
+            return
+        }
+        if (method == "textDocument/completion") {
+            var uri3 = extractUri(params!)
+            var src3 = this.session.docs.get(uri3)
+            var result3 = handleCompletion(params!, src3)
+            if (hasId) {
+                this.session.writeMessage(jsonRpcResult(idField!, result3))
+            }
+            return
+        }
+        if (method == "textDocument/hover") {
+            var uri4 = extractUri(params!)
+            var src4 = this.session.docs.get(uri4)
+            var result4 = handleHover(params!, src4, uri4)
+            if (hasId) {
+                this.session.writeMessage(jsonRpcResult(idField!, result4))
+            }
+            return
+        }
+        if (method == "textDocument/definition") {
+            var uri5 = extractUri(params!)
+            var src5 = this.session.docs.get(uri5)
+            var loc = handleDefinition(params!, src5, uri5)
+            if (hasId) {
+                if (loc == null) {
+                    this.session.writeMessage(jsonRpcResult(idField!, makeJsonNull()))
+                } else {
+                    this.session.writeMessage(jsonRpcResult(idField!, loc!))
+                }
+            }
+            return
+        }
+        if (method == "textDocument/references") {
+            var uri6 = extractUri(params!)
+            var src6 = this.session.docs.get(uri6)
+            var result6 = handleReferences(params!, src6, uri6)
+            if (hasId) {
+                this.session.writeMessage(jsonRpcResult(idField!, result6))
+            }
+            return
+        }
+        if (method == "textDocument/documentSymbol") {
+            var uri7 = extractUri(params!)
+            var src7 = this.session.docs.get(uri7)
+            var result7 = handleDocumentSymbol(params!, src7, uri7)
+            if (hasId) {
+                this.session.writeMessage(jsonRpcResult(idField!, result7))
+            }
+            return
+        }
+        if (hasId) {
+            this.session.writeMessage(jsonRpcError(idField!, LSP_ERR_METHOD_NOT_FOUND, method))
+        }
+    }
+
+    run(): Void {
+        var running = true
+        while (running) {
+            var msg = this.session.readMessage()
+            if (msg.kind == JSON_NULL && !jsonHasField(msg, "method")) {
+                running = false
+            } else {
+                this.handleMessage(msg)
+            }
+        }
+    }
+}
+
+runLspSession(session: LspSession): Void {
+    var server = LspServer(session: session)
+    server.run()
+}
+
+runLspServerStdio(): Void {
+    var docs = DocumentStore(uris: List(), sources: List())
+    var session = LspSession(mode: TRANSPORT_STDIO, fd: TRANSPORT_INVALID_FD, docs: docs)
+    runLspSession(session)
+}

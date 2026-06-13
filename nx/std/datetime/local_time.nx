@@ -1,0 +1,24 @@
+import std.core.integer
+
+final LOCAL_TIME_SECONDS_PER_MINUTE: Int = 60
+final LOCAL_TIME_SECONDS_PER_HOUR: Int = 3600
+final LOCAL_TIME_SECONDS_PER_DAY: Int = 86400
+
+class LocalTime(hour: Int, minute: Int, second: Int) {
+
+    toString(): String {
+        return integer.formatInt(this.hour) + ":" + integer.formatInt(this.minute) + ":" + integer.formatInt(this.second)
+    }
+}
+
+localTimeFromEpochDayRemainder(remainder: Int): LocalTime {
+    var rem = remainder
+    if (rem < 0) {
+        rem = rem + LOCAL_TIME_SECONDS_PER_DAY
+    }
+    var hour = rem / LOCAL_TIME_SECONDS_PER_HOUR
+    rem = rem % LOCAL_TIME_SECONDS_PER_HOUR
+    var minute = rem / LOCAL_TIME_SECONDS_PER_MINUTE
+    var second = rem % LOCAL_TIME_SECONDS_PER_MINUTE
+    return LocalTime(hour: hour, minute: minute, second: second)
+}

@@ -1,0 +1,23 @@
+exists(path: String): Bool {
+    return nx_file_exists(path)
+}
+
+mkdir(path: String): Bool {
+    return nx_mkdir(path)
+}
+
+deletePath(path: String): Bool {
+    return nx_delete(path)
+}
+
+renamePath(oldPath: String, newPath: String): Bool {
+    return nx_rename(oldPath, newPath)
+}
+
+fileSize(path: String): Int {
+    return nx_stat_size(path)
+}
+
+isDirectory(path: String): Bool {
+    return nx_stat_is_dir(path)
+}

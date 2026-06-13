@@ -1,0 +1,20 @@
+joinPath(left: String, right: String): String {
+    if (left.length() == 0) {
+        return right
+    }
+    if (left.endsWith("/")) {
+        return left + right
+    }
+    return left + "/" + right
+}
+
+class Path(value: String) {
+
+    toString(): String {
+        return this.value
+    }
+
+    child(name: String): Path {
+        return Path(value: joinPath(this.value, name))
+    }
+}

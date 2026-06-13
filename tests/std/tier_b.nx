@@ -1,0 +1,72 @@
+import std.io
+import std.fs.path
+import std.fs.files
+import std.system.environment
+import std.system.runtime_info
+import std.network.http_client
+import std.regex.matcher
+
+checkBool(name: String, got: Bool, expected: Bool): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+checkInt(name: String, got: Int, expected: Int): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+checkString(name: String, got: String, expected: String): Bool {
+    if (got == expected) {
+        io.println("PASS std: " + name)
+        return true
+    }
+    io.println("FAIL std: " + name)
+    return false
+}
+
+main(): Void {
+    var allPass = true
+    if (!checkBool("files_exists", files.exists("tests/std/tier_a.nx"), true)) {
+        allPass = false
+    }
+    if (!checkString("path_join", path.joinPath("tests", "std"), "tests/std")) {
+        allPass = false
+    }
+    if (!checkInt("file_size_positive", files.fileSize("tests/std/tier_a.nx") > 0, 1)) {
+        allPass = false
+    }
+    var outPath = "tests/std/_tier_b_tmp.txt"
+    io.writeFile(outPath, "tierb")
+    if (!checkString("file_roundtrip", io.readFile(outPath), "tierb")) {
+        allPass = false
+    }
+    files.deletePath(outPath)
+    if (!checkBool("time_now_positive", runtime_info.epochSeconds() > 0, true)) {
+        allPass = false
+    }
+    var pat = matcher.compilePattern("h.llo")
+    if (!checkBool("regex_match", matcher.matchPattern(pat, "hello"), true)) {
+        allPass = false
+    }
+    if (!checkBool("http_request_has_host", nx_string_contains(http_client.buildHttpGetRequest("example.com", "/"), "Host: example.com"), true)) {
+        allPass = false
+    }
+    if (!checkBool("env_path_nonempty", nx_string_len(nx_getenv("PATH")) > 0, true)) {
+        allPass = false
+    }
+    if (allPass) {
+        io.println("Todos los tests std tier_b pasaron.")
+    } else {
+        io.println("Algunos tests std tier_b fallaron.")
+        nx_exit(1)
+    }
+}

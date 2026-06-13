@@ -39,6 +39,8 @@ final STMT_WHILE: Int = 65
 final STMT_FOR: Int = 66
 final STMT_SWITCH: Int = 67
 final STMT_EXPR: Int = 68
+final STMT_TRY: Int = 69
+final STMT_THROW: Int = 70
 
 final OP_ADD: Int = 80
 final OP_SUB: Int = 81
@@ -59,11 +61,15 @@ final OP_NEG: Int = 94
 data FieldDecl {
     name: String
     ty: String
+    line: Int
+    col: Int
 }
 
 data Param {
     name: String
     ty: String
+    line: Int
+    col: Int
 }
 
 data Expr {
@@ -85,6 +91,8 @@ data Expr {
     elems: List
     lambda_params: List
     is_safe: Bool
+    line: Int
+    col: Int
 }
 
 data Stmt {
@@ -103,6 +111,8 @@ data Stmt {
     switch_arms: List
     expr: Expr?
     assign_val: Expr?
+    line: Int
+    col: Int
 }
 
 data SwitchArm {
@@ -119,6 +129,8 @@ data Function {
     is_block_body: Bool
     stmts: List
     body_expr: Expr?
+    line: Int
+    col: Int
 }
 
 data ClassDecl {
@@ -130,12 +142,16 @@ data ClassDecl {
     implements_types: List
     methods: List
     fields: List
+    line: Int
+    col: Int
 }
 
 data DataDecl {
     annotations: List
     name: String
     fields: List
+    line: Int
+    col: Int
 }
 
 data InterfaceDecl {
@@ -163,51 +179,58 @@ data Item {
     global_const: GlobalConst?
 }
 
-data Program {
-    items: List
+data ParseError {
+    msg: String
+    line: Int
+    col: Int
 }
 
-makeExprInt(v: Int): Expr {
+data Program {
+    items: List
+    parse_errors: List
+}
+
+makeExprInt(v: Int, line: Int, col: Int): Expr {
     var e = Expr(kind: EXPR_INT, int_val: v, float_val: "", str_val: "",
         char_val: "", bool_val: false, op: 0, left: null, right: null,
         callee: null, receiver: null, method_name: "", field_name: "",
         args: List(), path_parts: List(), elems: List(),
-        lambda_params: List(), is_safe: false)
+        lambda_params: List(), is_safe: false, line: line, col: col)
     return e
 }
 
-makeExprString(v: String): Expr {
+makeExprString(v: String, line: Int, col: Int): Expr {
     var e = Expr(kind: EXPR_STRING, int_val: 0, float_val: "", str_val: v,
         char_val: "", bool_val: false, op: 0, left: null, right: null,
         callee: null, receiver: null, method_name: "", field_name: "",
         args: List(), path_parts: List(), elems: List(),
-        lambda_params: List(), is_safe: false)
+        lambda_params: List(), is_safe: false, line: line, col: col)
     return e
 }
 
-makeExprBool(v: Bool): Expr {
+makeExprBool(v: Bool, line: Int, col: Int): Expr {
     var e = Expr(kind: EXPR_BOOL, int_val: 0, float_val: "", str_val: "",
         char_val: "", bool_val: v, op: 0, left: null, right: null,
         callee: null, receiver: null, method_name: "", field_name: "",
         args: List(), path_parts: List(), elems: List(),
-        lambda_params: List(), is_safe: false)
+        lambda_params: List(), is_safe: false, line: line, col: col)
     return e
 }
 
-makeExprPath(parts: List): Expr {
+makeExprPath(parts: List, line: Int, col: Int): Expr {
     var e = Expr(kind: EXPR_PATH, int_val: 0, float_val: "", str_val: "",
         char_val: "", bool_val: false, op: 0, left: null, right: null,
         callee: null, receiver: null, method_name: "", field_name: "",
         args: List(), path_parts: parts, elems: List(),
-        lambda_params: List(), is_safe: false)
+        lambda_params: List(), is_safe: false, line: line, col: col)
     return e
 }
 
-makeExprBinary(op: Int, l: Expr, r: Expr): Expr {
+makeExprBinary(op: Int, l: Expr, r: Expr, line: Int, col: Int): Expr {
     var e = Expr(kind: EXPR_BINARY, int_val: 0, float_val: "", str_val: "",
         char_val: "", bool_val: false, op: op, left: l, right: r,
         callee: null, receiver: null, method_name: "", field_name: "",
         args: List(), path_parts: List(), elems: List(),
-        lambda_params: List(), is_safe: false)
+        lambda_params: List(), is_safe: false, line: line, col: col)
     return e
 }

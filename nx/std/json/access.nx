@@ -1,0 +1,65 @@
+import std.json.value
+
+jsonGetField(obj: JSONValue, key: String): JSONValue? {
+    if (obj.kind != JSON_OBJECT) {
+        return null
+    }
+    return obj.obj_map.get(key)
+}
+
+jsonGetString(obj: JSONValue, key: String): String {
+    var v = jsonGetField(obj, key)
+    if (v == null) {
+        return ""
+    }
+    if (v!.kind != JSON_STRING) {
+        return ""
+    }
+    return v!.str_val
+}
+
+jsonGetInt(obj: JSONValue, key: String): Int {
+    var v = jsonGetField(obj, key)
+    if (v == null) {
+        return 0
+    }
+    if (v!.kind != JSON_INT) {
+        return 0
+    }
+    return v!.int_val
+}
+
+jsonGetBool(obj: JSONValue, key: String): Bool {
+    var v = jsonGetField(obj, key)
+    if (v == null) {
+        return false
+    }
+    if (v!.kind != JSON_BOOL) {
+        return false
+    }
+    return v!.bool_val
+}
+
+jsonHasField(obj: JSONValue, key: String): Bool {
+    if (obj.kind != JSON_OBJECT) {
+        return false
+    }
+    return obj.obj_map.contains(key)
+}
+
+jsonArrayLen(arr: JSONValue): Int {
+    if (arr.kind != JSON_ARRAY) {
+        return 0
+    }
+    return arr.arr_elems.len()
+}
+
+jsonArrayGet(arr: JSONValue, index: Int): JSONValue? {
+    if (arr.kind != JSON_ARRAY) {
+        return null
+    }
+    if (index < 0 || index >= arr.arr_elems.len()) {
+        return null
+    }
+    return arr.arr_elems.get(index)
+}

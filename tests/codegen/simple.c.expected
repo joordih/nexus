@@ -11,8 +11,9 @@ void nx_fn_main() {
     NxInt resultado = nx_fn_suma(((NxInt)3LL), ((NxInt)4LL));
 }
 
-int main(void) {
+int main(int argc, char** argv) {
     nexus_init();
+    nexus_set_args(argc, argv);
     nx_fn_main();
     return 0;
 }

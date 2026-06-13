@@ -526,8 +526,14 @@ impl SemaContext {
         if *got == NxType::Null {
             return matches!(expected, NxType::Nullable(_));
         }
-        if let NxType::Nullable(inner) = expected {
-            return self.types_compatible(got, inner) || *got == NxType::Null;
+        if let NxType::Nullable(inner_exp) = expected {
+            if let NxType::Nullable(inner_got) = got {
+                return self.types_compatible(inner_got, inner_exp);
+            }
+            return self.types_compatible(got, inner_exp);
+        }
+        if let NxType::Nullable(inner_got) = got {
+            return self.types_compatible(inner_got, expected);
         }
         got == expected
     }

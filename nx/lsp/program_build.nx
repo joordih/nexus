@@ -1,0 +1,217 @@
+import std.io
+
+percentDecode(s: String): String {
+    var out = ""
+    var i = 0
+    while (i < s.length()) {
+        if (i + 2 < s.length() && nx_string_char_at(s, i) == 37) {
+            var h1 = nx_string_char_at(s, i + 1)
+            var h2 = nx_string_char_at(s, i + 2)
+            if (h1 == 50 && h2 == 48) {
+                out = out + " "
+                i = i + 3
+                continue
+            }
+            if (h1 == 51 && h2 == 65) {
+                out = out + ":"
+                i = i + 3
+                continue
+            }
+            if (h1 == 50 && h2 == 70) {
+                out = out + "/"
+                i = i + 3
+                continue
+            }
+            if (h1 == 53 && h2 == 67) {
+                out = out + "\\"
+                i = i + 3
+                continue
+            }
+        }
+        out = out + s.substring(i, i + 1)
+        i = i + 1
+    }
+    return out
+}
+
+uriToPath(uri: String): String {
+    var s = uri
+    if (s.startsWith("file://")) {
+        s = s.substring(7, s.length())
+    }
+    s = percentDecode(s)
+    if (s.length() >= 3) {
+        var c0 = nx_string_char_at(s, 0)
+        var c1 = nx_string_char_at(s, 1)
+        var c2 = nx_string_char_at(s, 2)
+        if (c0 == 47 && c2 == 58) {
+            if ((c1 >= 65 && c1 <= 90) || (c1 >= 97 && c1 <= 122)) {
+                s = s.substring(1, s.length())
+            }
+        }
+    }
+    return s
+}
+
+lastSeparatorIndex(path: String): Int {
+    var last = -1
+    var i = 0
+    while (i < path.length()) {
+        var c = nx_string_char_at(path, i)
+        if (c == 47 || c == 92) {
+            last = i
+        }
+        i = i + 1
+    }
+    return last
+}
+
+parentDir(path: String): String {
+    var idx = lastSeparatorIndex(path)
+    if (idx <= 0) {
+        return ""
+    }
+    return path.substring(0, idx)
+}
+
+baseName(path: String): String {
+    var idx = lastSeparatorIndex(path)
+    if (idx < 0) {
+        return path
+    }
+    return path.substring(idx + 1, path.length())
+}
+
+sortStringList(lst: List): List {
+    var n = lst.len()
+    var sorted: List = List()
+    var i = 0
+    while (i < n) {
+        var s: String = lst.get(i)
+        sorted.push(s)
+        i = i + 1
+    }
+    var i2 = 0
+    while (i2 < n) {
+        var j = i2 + 1
+        while (j < n) {
+            var a: String = sorted.get(i2)
+            var b: String = sorted.get(j)
+            if (nx_string_lt(b, a)) {
+                sorted.set(i2, b)
+                sorted.set(j, a)
+            }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+    return sorted
+}
+
+appendDirItems(allItems: List, allErrors: List, dirPath: String, focusFile: String, focusSource: String): Void {
+    var files: List = nx_list_dir(dirPath)
+    if (files.len() == 0) {
+        return
+    }
+    var sorted: List = sortStringList(files)
+    var i = 0
+    while (i < sorted.len()) {
+        var name: String = sorted.get(i)
+        if (name.endsWith(".nx")) {
+            var src = ""
+            if (focusFile != "" && name == focusFile) {
+                src = focusSource
+            } else {
+                var path = dirPath + "/" + name
+                src = io.readFile(path)
+            }
+            var toks = tokenizeSource(src)
+            var prog = parseSource(toks)
+            var j = 0
+            while (j < prog.items.len()) {
+                var item: Item = prog.items.get(j)
+                allItems.push(item)
+                j = j + 1
+            }
+            var pe = 0
+            while (pe < prog.parse_errors.len()) {
+                allErrors.push(prog.parse_errors.get(pe))
+                pe = pe + 1
+            }
+        }
+        i = i + 1
+    }
+}
+
+parseDirProgram(dirPath: String, focusFile: String, focusSource: String): Program {
+    var allItems: List = List()
+    var allErrors: List = List()
+    appendDirItems(allItems, allErrors, dirPath, focusFile, focusSource)
+    return Program(items: allItems, parse_errors: allErrors)
+}
+
+checkProgramCollect(prog: Program): SemaCtx {
+    var ctx = makeSemaCtx()
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        collectItem(ctx, item)
+        i = i + 1
+    }
+    return ctx
+}
+
+checkProgramItems(ctx: SemaCtx, prog: Program): Void {
+    var j = 0
+    while (j < prog.items.len()) {
+        var item2: Item = prog.items.get(j)
+        checkItem(ctx, item2)
+        j = j + 1
+    }
+}
+
+appendParseErrors(ctx: SemaCtx, prog: Program): Void {
+    var i = 0
+    while (i < prog.parse_errors.len()) {
+        var pe: ParseError = prog.parse_errors.get(i)
+        ctx.addError(pe.msg, pe.line, pe.col)
+        i = i + 1
+    }
+}
+
+analyzeSingleSource(source: String): SemaCtx {
+    var tokens = tokenizeSource(source)
+    var prog = parseSource(tokens)
+    var expanded = expandProgramImports(prog)
+    var ctx = checkProgram(expanded)
+    appendParseErrors(ctx, prog)
+    return ctx
+}
+
+analyzeSource(uri: String, source: String): SemaCtx {
+    var path = uriToPath(uri)
+    var dir = parentDir(path)
+    if (dir == "") {
+        return analyzeSingleSource(source)
+    }
+    var fileName = baseName(path)
+    var merged = parseDirProgram(dir, fileName, source)
+    if (merged.items.len() == 0) {
+        return analyzeSingleSource(source)
+    }
+    var focusTokens = tokenizeSource(source)
+    var focus = parseSource(focusTokens)
+    var mergedExpanded = expandProgramImports(merged)
+    var focusExpanded = expandProgramImports(focus)
+    var ctx = checkProgramCollect(mergedExpanded)
+    var i = 0
+    while (i < focusExpanded.items.len()) {
+        var item: Item = focusExpanded.items.get(i)
+        collectItem(ctx, item)
+        i = i + 1
+    }
+    checkProgramItems(ctx, focus)
+    appendParseErrors(ctx, focus)
+    appendParseErrors(ctx, merged)
+    return ctx
+}

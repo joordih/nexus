@@ -1,0 +1,88 @@
+import compiler.ast
+import std.json.value
+
+findDeclSpan(prog: Program, name: String): JSONValue? {
+    var i = 0
+    while (i < prog.items.len()) {
+        var item: Item = prog.items.get(i)
+        if (item.kind == ITEM_FUNCTION) {
+            if (item.function_decl != null) {
+                var fn: Function = item.function_decl!
+                if (fn.name == name) {
+                    return makeRange(fn.line - 1, fn.col - 1, fn.line - 1, fn.col)
+                }
+            }
+        }
+        if (item.kind == ITEM_CLASS) {
+            if (item.class_decl != null) {
+                var cd: ClassDecl = item.class_decl!
+                if (cd.name == name) {
+                    return makeRange(cd.line - 1, cd.col - 1, cd.line - 1, cd.col)
+                }
+                var j = 0
+                while (j < cd.methods.len()) {
+                    var m: Function = cd.methods.get(j)
+                    if (m.name == name) {
+                        return makeRange(m.line - 1, m.col - 1, m.line - 1, m.col)
+                    }
+                    j = j + 1
+                }
+            }
+        }
+        if (item.kind == ITEM_DATA) {
+            if (item.data_decl != null) {
+                var dd: DataDecl = item.data_decl!
+                if (dd.name == name) {
+                    return makeRange(dd.line - 1, dd.col - 1, dd.line - 1, dd.col)
+                }
+            }
+        }
+        i = i + 1
+    }
+    return null
+}
+
+pathNameFromExpr(expr: Expr): String {
+    if (expr.kind != EXPR_PATH) {
+        return ""
+    }
+    var parts: List = expr.path_parts
+    if (parts.len() == 0) {
+        return ""
+    }
+    return parts.get(parts.len() - 1)
+}
+
+handleDefinition(params: JSONValue, source: String, uri: String): JSONValue? {
+    var pos = jsonGetField(params, "position")
+    var line = 0
+    var character = 0
+    if (pos != null) {
+        line = jsonGetInt(pos!, "line") + 1
+        character = jsonGetInt(pos!, "character") + 1
+    }
+    var tokens = tokenizeSource(source)
+    var prog = parseSource(tokens)
+    var expr = findExprAt(prog, line, character)
+    if (expr == null) {
+        return null
+    }
+    var name = pathNameFromExpr(expr!)
+    if (name == "") {
+        return null
+    }
+    var range = findDeclSpan(prog, name)
+    if (range == null) {
+        return null
+    }
+    return makeLocation(uri, range!)
+}
+
+handleReferences(params: JSONValue, source: String, uri: String): JSONValue {
+    var result: List = List()
+    var keys: List = List()
+    keys.push("locations")
+    var vals: List = List()
+    vals.push(makeJsonArray(result))
+    return makeJsonObjectFromPairs(keys, vals)
+}

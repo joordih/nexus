@@ -1,0 +1,172 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Nexus",
+  "scopeName": "source.nexus",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#char-literals" },
+    { "include": "#keywords" },
+    { "include": "#builtin-types" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#function-definition" },
+    { "include": "#class-definition" },
+    { "include": "#method-call" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.nexus",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.nexus",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.nexus" } },
+          "endCaptures":   { "0": { "name": "punctuation.definition.comment.end.nexus" } }
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.nexus",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.nexus" } },
+      "endCaptures":   { "0": { "name": "punctuation.definition.string.end.nexus" } },
+      "patterns": [
+        {
+          "name": "constant.character.escape.nexus",
+          "match": "\\\\[ntr\\\\\"0]"
+        }
+      ]
+    },
+    "char-literals": {
+      "name": "string.quoted.single.nexus",
+      "match": "'(?:\\\\[ntr\\\\'0]|[^'\\\\])'",
+      "captures": {
+        "0": { "name": "string.quoted.single.nexus" }
+      }
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.nexus",
+          "match": "\\b(if|else|while|for|in|return|break|continue|try|catch|throw|switch|case|default)\\b"
+        },
+        {
+          "name": "keyword.declaration.nexus",
+          "match": "\\b(var|final|class|data|value|interface|annotation)\\b"
+        },
+        {
+          "name": "keyword.other.nexus",
+          "match": "\\b(import|module|extends|implements|this)\\b"
+        }
+      ]
+    },
+    "builtin-types": {
+      "name": "storage.type.nexus",
+      "match": "\\b(Int|Long|Float|Double|Bool|Char|String|Void|List|Map)\\b"
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.nexus",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.nexus",
+          "match": "\\bnull\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.nexus",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.nexus",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "function-definition": {
+      "comment": "Matches: name(  or  name<T>(  at start of statement — function/method definition",
+      "match": "^\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.nexus" }
+      }
+    },
+    "class-definition": {
+      "patterns": [
+        {
+          "match": "\\b(class|data|value|interface|annotation)\\s+([A-Z][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.nexus" },
+            "2": { "name": "entity.name.type.nexus" }
+          }
+        },
+        {
+          "name": "entity.name.type.nexus",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "method-call": {
+      "match": "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.member.nexus" }
+      }
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.nexus",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.comparison.nexus",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.nexus",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.nexus",
+          "match": "\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.arrow.nexus",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.nullable.nexus",
+          "match": "\\?\\.|\\?:|\\?"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.colon.nexus",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.separator.comma.nexus",
+          "match": ","
+        },
+        {
+          "name": "punctuation.terminator.nexus",
+          "match": ";"
+        }
+      ]
+    }
+  }
+}

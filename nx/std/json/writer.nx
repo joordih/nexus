@@ -1,0 +1,112 @@
+escapeJsonString(s: String): String {
+    var result = ""
+    var i = 0
+    while (i < s.length()) {
+        var c = nx_string_char_at(s, i)
+        if (c == '"') {
+            result = result + "\\\""
+        } else if (c == '\\') {
+            result = result + "\\\\"
+        } else if (c == '\n') {
+            result = result + "\\n"
+        } else if (c == '\t') {
+            result = result + "\\t"
+        } else if (c == '\r') {
+            result = result + "\\r"
+        } else {
+            result = result + c.toString()
+        }
+        i = i + 1
+    }
+    return result
+}
+
+sortJsonKeys(lst: List): List {
+    var n = lst.len()
+    var sorted: List = List()
+    var i = 0
+    while (i < n) {
+        var item: String = lst.get(i)
+        sorted.push(item)
+        i = i + 1
+    }
+    var i2 = 0
+    while (i2 < n) {
+        var j = i2 + 1
+        while (j < n) {
+            var a: String = sorted.get(i2)
+            var b: String = sorted.get(j)
+            if (nx_string_lt(b, a)) {
+                sorted.set(i2, b)
+                sorted.set(j, a)
+            }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+    return sorted
+}
+
+class JSONWriter() {
+
+    write(jsonVal: JSONValue): String {
+        if (jsonVal.kind == JSON_NULL) {
+            return "null"
+        }
+        if (jsonVal.kind == JSON_BOOL) {
+            if (jsonVal.bool_val) {
+                return "true"
+            }
+            return "false"
+        }
+        if (jsonVal.kind == JSON_INT) {
+            return jsonVal.int_val.toString()
+        }
+        if (jsonVal.kind == JSON_FLOAT) {
+            return jsonVal.float_val
+        }
+        if (jsonVal.kind == JSON_STRING) {
+            return "\"" + escapeJsonString(jsonVal.str_val) + "\""
+        }
+        if (jsonVal.kind == JSON_ARRAY) {
+            return this.writeArray(jsonVal)
+        }
+        if (jsonVal.kind == JSON_OBJECT) {
+            return this.writeObject(jsonVal)
+        }
+        return "null"
+    }
+
+    writeArray(jsonVal: JSONValue): String {
+        var result = "["
+        var i = 0
+        while (i < jsonVal.arr_elems.len()) {
+            if (i > 0) {
+                result = result + ","
+            }
+            var elem: JSONValue = jsonVal.arr_elems.get(i)
+            result = result + this.write(elem)
+            i = i + 1
+        }
+        result = result + "]"
+        return result
+    }
+
+    writeObject(jsonVal: JSONValue): String {
+        var keys = nx_map_keys(jsonVal.obj_map)
+        var sorted = sortJsonKeys(keys)
+        var result = "{"
+        var i = 0
+        while (i < sorted.len()) {
+            if (i > 0) {
+                result = result + ","
+            }
+            var key: String = sorted.get(i)
+            var child: JSONValue = jsonVal.obj_map.get(key)!
+            result = result + "\"" + escapeJsonString(key) + "\":" + this.write(child)
+            i = i + 1
+        }
+        result = result + "}"
+        return result
+    }
+}

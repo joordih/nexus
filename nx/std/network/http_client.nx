@@ -1,0 +1,30 @@
+import std.network.socket
+import std.core.strings
+import std.core.integer
+
+buildHttpGetRequest(host: String, path: String): String {
+    return "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+}
+
+parseHttpStatusLine(line: String): Int {
+    var parts: List = strings.splitString(line, " ")
+    if (parts.len() < 2) {
+        return -1
+    }
+    return integer.parseInt(parts.get(1))
+}
+
+class HttpClient(host: String, port: Int) {
+
+    get(path: String): Int {
+        var sock = connectSocket(this.host, this.port)
+        if (sock == null) {
+            return -1
+        }
+        var request = buildHttpGetRequest(this.host, path)
+        sock!.writeText(request)
+        var statusLine = sock!.readLine()
+        sock!.close()
+        return parseHttpStatusLine(statusLine)
+    }
+}

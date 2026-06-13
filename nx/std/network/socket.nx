@@ -1,0 +1,26 @@
+class Socket(fd: Int) {
+
+    readBytes(n: Int): String {
+        return nx_tcp_read(this.fd, n)
+    }
+
+    readLine(): String {
+        return nx_tcp_read_line(this.fd)
+    }
+
+    writeText(text: String): Void {
+        nx_tcp_write(this.fd, text, text.length())
+    }
+
+    close(): Void {
+        nx_tcp_close(this.fd)
+    }
+}
+
+connectSocket(host: String, port: Int): Socket? {
+    var fd = nx_tcp_connect(host, port)
+    if (fd < 0) {
+        return null
+    }
+    return Socket(fd: fd)
+}

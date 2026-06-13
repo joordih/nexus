@@ -1,0 +1,13 @@
+import std.json.value
+import std.json.parser
+import std.json.writer
+
+parse(text: String): JSONValue {
+    var parser = JSONParser(source: text, pos: 0)
+    return parser.parse()
+}
+
+stringify(val: JSONValue): String {
+    var writer = JSONWriter()
+    return writer.write(val)
+}

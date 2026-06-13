@@ -2,17 +2,14 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Literals
     Ident(String),
     Int(i64),
     Float(f64),
     StringLit(String),
     CharLit(char),
-    // Keywords — valores
     True,
     False,
     Null,
-    // Keywords — declaraciones
     Var,
     Final,
     Return,
@@ -26,7 +23,6 @@ pub enum TokenKind {
     Switch,
     Case,
     Default,
-    // Keywords — tipos/estructuras
     Class,
     Data,
     Value,
@@ -34,39 +30,30 @@ pub enum TokenKind {
     Extends,
     Implements,
     Annotation,
-    // Keywords — módulos
     Module,
     Import,
-    // Keywords — this
     This,
-    // Operadores aritméticos
     Plus,
     Minus,
     Star,
     Slash,
     Percent,
-    // Operadores comparación
     EqEq,
     BangEq,
     Lt,
     LtEq,
     Gt,
     GtEq,
-    // Operadores lógicos
     AmpAmp,
     PipePipe,
     Bang,
-    // Asignación y flecha
     Eq,
     Arrow,
     FatArrow,
-    // Null safety
     Question,
     QuestionDot,
     QuestionColon,
-    // Anotaciones
     At,
-    // Puntuación
     Dot,
     Comma,
     Colon,

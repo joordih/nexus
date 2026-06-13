@@ -1,0 +1,25 @@
+class Stack(elems: List, count: Int) {
+
+    size(): Int {
+        return this.count
+    }
+
+    isEmpty(): Bool {
+        return this.count == 0
+    }
+
+    push(elem: String): Void {
+        this.elems.push(elem)
+        this.count = this.count + 1
+    }
+
+    pop(): String {
+        this.count = this.count - 1
+        var item: String = this.elems.get(this.count)
+        return item
+    }
+
+    peek(): String {
+        return this.elems.get(this.count - 1)
+    }
+}

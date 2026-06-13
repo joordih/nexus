@@ -1,0 +1,96 @@
+{
+  "name": "vscode-nexus",
+  "displayName": "Nexus Language",
+  "description": "Syntax highlighting and error diagnostics for the Nexus language",
+  "version": "0.1.8",
+  "publisher": "nexus-lang",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:nexus"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "nexus",
+        "aliases": [
+          "Nexus",
+          "nexus"
+        ],
+        "extensions": [
+          ".nx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nexus",
+        "scopeName": "source.nexus",
+        "path": "./syntaxes/nexus.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Nexus",
+      "properties": {
+        "nexus.compilerPath": {
+          "type": "string",
+          "default": "nxc",
+          "description": "Path to the nxc compiler executable. Defaults to 'nxc' (must be on PATH)."
+        },
+        "nexus.compilerWorkingDir": {
+          "type": "string",
+          "default": "",
+          "description": "Working directory for the compiler (needed to find runtime/). Leave empty to use the workspace root."
+        },
+        "nexus.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the compiler on save to show diagnostics."
+        },
+        "nexus.lspPath": {
+          "type": "string",
+          "default": "nexus-lsp",
+          "description": "Path to the nexus-lsp language server binary. Defaults to 'nexus-lsp' on PATH or build/nexus-lsp in the workspace."
+        },
+        "nexus.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace communication between VS Code and the Nexus language server. Verbose logs appear in the Nexus Language Server Trace output channel."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "nexus.showOutput",
+        "title": "Show Language Server Output",
+        "category": "Nexus"
+      }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,66 @@
+import std.io
+
+roundTrip(input: String, expected: String, name: String): Bool {
+    var parser = JSONParser(source: input, pos: 0)
+    var val = parser.parse()
+    var writer = JSONWriter()
+    var got = writer.write(val)
+    if (got == expected) {
+        io.println("PASS json: " + name)
+        return true
+    }
+    io.println("FAIL json: " + name)
+    io.println("  input:    " + input)
+    io.println("  expected: " + expected)
+    io.println("  got:      " + got)
+    return false
+}
+
+main(): Void {
+    var allPass = true
+    if (!roundTrip("null", "null", "null")) {
+        allPass = false
+    }
+    if (!roundTrip("true", "true", "bool_true")) {
+        allPass = false
+    }
+    if (!roundTrip("false", "false", "bool_false")) {
+        allPass = false
+    }
+    if (!roundTrip("42", "42", "int")) {
+        allPass = false
+    }
+    if (!roundTrip("-7", "-7", "int_negative")) {
+        allPass = false
+    }
+    if (!roundTrip("1.5", "1.5", "float")) {
+        allPass = false
+    }
+    if (!roundTrip("\"hello\"", "\"hello\"", "string")) {
+        allPass = false
+    }
+    if (!roundTrip("\"say \\\"hi\\\"\\n\"", "\"say \\\"hi\\\"\\n\"", "string_escape")) {
+        allPass = false
+    }
+    if (!roundTrip("[]", "[]", "array_empty")) {
+        allPass = false
+    }
+    if (!roundTrip("[1,\"a\",true]", "[1,\"a\",true]", "array_mixed")) {
+        allPass = false
+    }
+    if (!roundTrip("{}", "{}", "object_empty")) {
+        allPass = false
+    }
+    if (!roundTrip("{\"b\":1,\"a\":2}", "{\"a\":2,\"b\":1}", "object_sorted")) {
+        allPass = false
+    }
+    if (!roundTrip("{\"x\":{\"y\":1,\"z\":2},\"a\":0}", "{\"a\":0,\"x\":{\"y\":1,\"z\":2}}", "object_nested")) {
+        allPass = false
+    }
+    if (allPass) {
+        io.println("Todos los tests json pasaron.")
+    } else {
+        io.println("Algunos tests json fallaron.")
+        nx_exit(1)
+    }
+}

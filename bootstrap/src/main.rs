@@ -64,6 +64,15 @@ fn main() {
                 }
                 return;
             }
+            "compile-dir" => {
+                if args.len() < 3 { eprintln!("uso: nxc compile-dir <directorio> [salida]"); std::process::exit(1); }
+                let output = if args.len() >= 4 { &args[3] } else { "a.out" };
+                if let Err(e) = driver::compile_dir(&args[2], output) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+                return;
+            }
             "test-e2e" => {
                 let dir = if args.len() >= 3 { &args[2] } else { "tests/e2e" };
                 if driver::run_e2e_tests(dir) {

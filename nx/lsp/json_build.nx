@@ -1,0 +1,144 @@
+makeJsonObjectFromPairs(keys: List, values: List): JSONValue {
+    var m: Map = Map()
+    var i = 0
+    while (i < keys.len()) {
+        var k: String = keys.get(i)
+        var v: JSONValue = values.get(i)
+        m.put(k, v)
+        i = i + 1
+    }
+    return makeJsonObject(m)
+}
+
+jsonRpcResult(idVal: JSONValue, result: JSONValue): JSONValue {
+    var keys: List = List()
+    keys.push("jsonrpc")
+    keys.push("id")
+    keys.push("result")
+    var vals: List = List()
+    vals.push(makeJsonString("2.0"))
+    vals.push(idVal)
+    vals.push(result)
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+jsonRpcError(idVal: JSONValue, code: Int, message: String): JSONValue {
+    var errKeys: List = List()
+    errKeys.push("code")
+    errKeys.push("message")
+    var errVals: List = List()
+    errVals.push(makeJsonInt(code))
+    errVals.push(makeJsonString(message))
+    var errObj = makeJsonObjectFromPairs(errKeys, errVals)
+    var keys: List = List()
+    keys.push("jsonrpc")
+    keys.push("id")
+    keys.push("error")
+    var vals: List = List()
+    vals.push(makeJsonString("2.0"))
+    vals.push(idVal)
+    vals.push(errObj)
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+jsonRpcNotification(method: String, params: JSONValue): JSONValue {
+    var keys: List = List()
+    keys.push("jsonrpc")
+    keys.push("method")
+    keys.push("params")
+    var vals: List = List()
+    vals.push(makeJsonString("2.0"))
+    vals.push(makeJsonString(method))
+    vals.push(params)
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+jsonRpcRequest(idVal: JSONValue, method: String, params: JSONValue): JSONValue {
+    var keys: List = List()
+    keys.push("jsonrpc")
+    keys.push("id")
+    keys.push("method")
+    keys.push("params")
+    var vals: List = List()
+    vals.push(makeJsonString("2.0"))
+    vals.push(idVal)
+    vals.push(makeJsonString(method))
+    vals.push(params)
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+makePosition(line: Int, character: Int): JSONValue {
+    var keys: List = List()
+    keys.push("line")
+    keys.push("character")
+    var vals: List = List()
+    vals.push(makeJsonInt(line))
+    vals.push(makeJsonInt(character))
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+makeRange(startLine: Int, startCol: Int, endLine: Int, endCol: Int): JSONValue {
+    var keys: List = List()
+    keys.push("start")
+    keys.push("end")
+    var vals: List = List()
+    vals.push(makePosition(startLine, startCol))
+    vals.push(makePosition(endLine, endCol))
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+makeLocation(uri: String, range: JSONValue): JSONValue {
+    var keys: List = List()
+    keys.push("uri")
+    keys.push("range")
+    var vals: List = List()
+    vals.push(makeJsonString(uri))
+    vals.push(range)
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+makeTextEdit(range: JSONValue, newText: String): JSONValue {
+    var keys: List = List()
+    keys.push("range")
+    keys.push("newText")
+    var vals: List = List()
+    vals.push(range)
+    vals.push(makeJsonString(newText))
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+makeCompletionItem(label: String, kind: Int, detail: String): JSONValue {
+    var keys: List = List()
+    keys.push("label")
+    keys.push("kind")
+    keys.push("detail")
+    var vals: List = List()
+    vals.push(makeJsonString(label))
+    vals.push(makeJsonInt(kind))
+    vals.push(makeJsonString(detail))
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+makeDiagnostic(range: JSONValue, message: String, severity: Int): JSONValue {
+    var keys: List = List()
+    keys.push("range")
+    keys.push("message")
+    keys.push("severity")
+    var vals: List = List()
+    vals.push(range)
+    vals.push(makeJsonString(message))
+    vals.push(makeJsonInt(severity))
+    return makeJsonObjectFromPairs(keys, vals)
+}
+
+makeSymbolInformation(name: String, kind: Int, location: JSONValue): JSONValue {
+    var keys: List = List()
+    keys.push("name")
+    keys.push("kind")
+    keys.push("location")
+    var vals: List = List()
+    vals.push(makeJsonString(name))
+    vals.push(makeJsonInt(kind))
+    vals.push(location)
+    return makeJsonObjectFromPairs(keys, vals)
+}

@@ -1,0 +1,66 @@
+import std.regex.pattern
+
+matchRegexHere(pattern: String, text: String, p: Int, t: Int): Bool {
+    if (p >= pattern.length()) {
+        return t == text.length()
+    }
+    var pc = pattern.charAt(p)
+    if (pc == '^' && p == 0) {
+        return matchRegexHere(pattern, text, p + 1, t)
+    }
+    if (p + 1 < pattern.length() && pattern.charAt(p + 1) == '*') {
+        var p2 = p + 2
+        var ti = t
+        while (true) {
+            if (matchRegexHere(pattern, text, p2, ti)) {
+                return true
+            }
+            if (ti >= text.length()) {
+                return false
+            }
+            if (!regexCharMatches(pc, text.charAt(ti))) {
+                return false
+            }
+            ti = ti + 1
+        }
+    }
+    if (p + 1 < pattern.length() && pattern.charAt(p + 1) == '?') {
+        if (matchRegexHere(pattern, text, p + 2, t)) {
+            return true
+        }
+        if (t < text.length() && regexCharMatches(pc, text.charAt(t))) {
+            return matchRegexHere(pattern, text, p + 2, t + 1)
+        }
+        return false
+    }
+    if (t >= text.length()) {
+        return false
+    }
+    if (!regexCharMatches(pc, text.charAt(t))) {
+        return false
+    }
+    return matchRegexHere(pattern, text, p + 1, t + 1)
+}
+
+regexCharMatches(pc: Char, tc: Char): Bool {
+    if (pc == '.') {
+        return true
+    }
+    return pc == tc
+}
+
+class Matcher(pattern: Pattern, text: String) {
+
+    matches(): Bool {
+        return matchRegexHere(this.pattern.regex, this.text, 0, 0)
+    }
+}
+
+compilePattern(regex: String): Pattern {
+    return Pattern(regex: regex)
+}
+
+matchPattern(pattern: Pattern, text: String): Bool {
+    var matcher = Matcher(pattern: pattern, text: text)
+    return matcher.matches()
+}

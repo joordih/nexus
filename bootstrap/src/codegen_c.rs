@@ -38,7 +38,6 @@ impl CGen {
         self.emit_line("#include \"nexus_runtime.h\"");
         self.output.push('\n');
 
-        // Forward type declarations
         let mut sorted_structs: Vec<_> = self.ctx.structs.keys().cloned().collect();
         sorted_structs.sort();
         for name in &sorted_structs {
@@ -46,7 +45,6 @@ impl CGen {
         }
         if !sorted_structs.is_empty() { self.output.push('\n'); }
 
-        // Struct definitions
         for name in &sorted_structs {
             let si = self.ctx.structs[name].clone();
             self.emit_line(&format!("struct NxStruct_{} {{", name));
@@ -60,7 +58,6 @@ impl CGen {
             self.output.push('\n');
         }
 
-        // Global constants
         let items: Vec<_> = program.items.clone();
         for item in &items {
             if let Item::GlobalConst(g) = item {
@@ -76,7 +73,6 @@ impl CGen {
         let has_globals = items.iter().any(|i| matches!(i, Item::GlobalConst(_)));
         if has_globals { self.output.push('\n'); }
 
-        // Forward function declarations
         let mut forward_decls = Vec::new();
         for item in &items {
             match item {
@@ -103,8 +99,9 @@ impl CGen {
             self.gen_item(item);
         }
         if has_main {
-            self.emit_line("int main(void) {");
+            self.emit_line("int main(int argc, char** argv) {");
             self.emit_line("    nexus_init();");
+            self.emit_line("    nexus_set_args(argc, argv);");
             self.emit_line("    nx_fn_main();");
             self.emit_line("    return 0;");
             self.emit_line("}");
@@ -525,23 +522,36 @@ impl CGen {
         }).unwrap_or(NxType::Unknown)
     }
 
+    fn builtin_free_fn_c_name(name: &str) -> Option<&'static str> {
+        match name {
+            "min" => Some("nx_min"),
+            _ => None,
+        }
+    }
+
     fn gen_call(&mut self, callee: &Expr, args: &[CallArg]) -> String {
         if let Expr::Path(p) = callee {
-            // io.println / io.print / io.readLine / io.readFile
             if p.len() == 2 && p[0] == "io" {
                 return self.gen_io_call(&p[1], args);
             }
 
-            // List() constructor
             if p.len() == 1 && p[0] == "List" {
                 return "nx_list_new()".to_string();
             }
-            // Map() constructor
             if p.len() == 1 && p[0] == "Map" {
                 return "nx_map_new()".to_string();
             }
 
-            // User-defined struct constructor
+            if p.len() == 1 {
+                if let Some(c_name) = Self::builtin_free_fn_c_name(&p[0]) {
+                    let args_str: Vec<_> = args.iter().map(|a| match a {
+                        CallArg::Positional(e) => self.gen_expr(e, None),
+                        CallArg::Named { value, .. } => self.gen_expr(value, None),
+                    }).collect();
+                    return format!("{}({})", c_name, args_str.join(", "));
+                }
+            }
+
             if p.len() == 1 && self.ctx.structs.contains_key(&p[0]) {
                 let type_name = p[0].clone();
                 let tmp = self.fresh_tmp();
@@ -573,7 +583,9 @@ impl CGen {
                 return tmp;
             }
 
-            let fn_name = if p.len() == 1 {
+            let fn_name = if p.len() == 1 && p[0].starts_with("nx_") {
+                p[0].clone()
+            } else if p.len() == 1 {
                 format!("nx_fn_{}", p[0])
             } else {
                 format!("nx_fn_{}", p.join("_"))
@@ -638,12 +650,16 @@ impl CGen {
                 let path = self.get_call_arg_str(args, 0);
                 format!("nx_read_file({})", path)
             }
+            "writeFile" => {
+                let path = self.get_call_arg_str(args, 0);
+                let content = self.get_call_arg_str(args, 1);
+                format!("nx_write_file({}, {})", path, content)
+            }
             _ => format!("nx_fn_io_{}()", method),
         }
     }
 
     fn gen_method_call(&mut self, receiver: &Expr, method: &str, args: &[CallArg], _safe: bool) -> String {
-        // io module
         if let Expr::Path(p) = receiver {
             if p.len() == 1 && p[0] == "io" {
                 return self.gen_io_call(method, args);
@@ -653,7 +669,6 @@ impl CGen {
         let recv_type = self.infer_expr_type(receiver);
         let recv = self.gen_expr(receiver, Some(&recv_type));
 
-        // String methods
         if matches!(recv_type, NxType::StringType) {
             return match method {
                 "length" => format!("nx_string_len({})", recv),
@@ -679,6 +694,10 @@ impl CGen {
                     let prefix = self.get_call_arg_str(args, 0);
                     format!("nx_string_starts_with({}, {})", recv, prefix)
                 }
+                "endsWith" => {
+                    let suffix = self.get_call_arg_str(args, 0);
+                    format!("nx_string_ends_with({}, {})", recv, suffix)
+                }
                 "contains" => {
                     let sub = self.get_call_arg_str(args, 0);
                     format!("nx_string_contains({}, {})", recv, sub)
@@ -688,7 +707,6 @@ impl CGen {
             };
         }
 
-        // List methods
         if let NxType::List(elem_ty) = &recv_type.clone() {
             let elem_ty = elem_ty.clone();
             return match method {
@@ -715,7 +733,6 @@ impl CGen {
             };
         }
 
-        // Map methods
         if let NxType::Map(key_ty, val_ty) = &recv_type.clone() {
             let val_ty = val_ty.clone();
             let _ = key_ty;
@@ -744,28 +761,24 @@ impl CGen {
             };
         }
 
-        // Int/Long methods
         if matches!(recv_type, NxType::Int | NxType::Long) {
             if method == "toString" {
                 return format!("nx_int_to_string({})", recv);
             }
         }
 
-        // Bool methods
         if matches!(recv_type, NxType::Bool) {
             if method == "toString" {
                 return format!("nx_bool_to_string({})", recv);
             }
         }
 
-        // Char methods
         if matches!(recv_type, NxType::Char) {
             if method == "toString" {
                 return format!("nx_char_to_string({})", recv);
             }
         }
 
-        // User-defined class methods
         let type_name = match &recv_type {
             NxType::Named(n) => n.clone(),
             NxType::Nullable(inner) => match inner.as_ref() {
@@ -818,6 +831,9 @@ impl CGen {
                     if p.len() == 1 {
                         if p[0] == "List" { return NxType::List(Box::new(NxType::Unknown)); }
                         if p[0] == "Map" { return NxType::Map(Box::new(NxType::Unknown), Box::new(NxType::Unknown)); }
+                        if Self::builtin_free_fn_c_name(&p[0]).is_some() {
+                            return NxType::Int;
+                        }
                         if let Some(fi) = self.ctx.functions.get(&p[0]) {
                             return fi.return_type.clone();
                         }

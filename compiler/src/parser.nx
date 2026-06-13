@@ -1,0 +1,1422 @@
+final CALL_NAMED: Int = 0
+final CALL_POS: Int = 1
+
+data CallArg {
+    kind: Int
+    label: String
+    val: Expr?
+}
+
+makeNamedArg(name: String, v: Expr): CallArg {
+    return CallArg(kind: CALL_NAMED, label: name, val: v)
+}
+
+makePosArg(v: Expr): CallArg {
+    return CallArg(kind: CALL_POS, label: "", val: v)
+}
+
+class Parser(tokens: List, pos: Int, errors: List) {
+
+    addParseError(msg: String, line: Int, col: Int): Void {
+        var err = ParseError(msg: msg, line: line, col: col)
+        this.errors.push(err)
+    }
+
+    currentKind(): Int {
+        var idx = this.pos
+        if (idx >= this.tokens.len()) {
+            idx = this.tokens.len() - 1
+        }
+        var tok: Token = this.tokens.get(idx)
+        return tok.kind
+    }
+
+    currentText(): String {
+        var idx = this.pos
+        if (idx >= this.tokens.len()) {
+            idx = this.tokens.len() - 1
+        }
+        var tok: Token = this.tokens.get(idx)
+        return tok.text
+    }
+
+    currentLine(): Int {
+        var idx = this.pos
+        if (idx >= this.tokens.len()) {
+            idx = this.tokens.len() - 1
+        }
+        var tok: Token = this.tokens.get(idx)
+        return tok.line
+    }
+
+    currentCol(): Int {
+        var idx = this.pos
+        if (idx >= this.tokens.len()) {
+            idx = this.tokens.len() - 1
+        }
+        var tok: Token = this.tokens.get(idx)
+        return tok.col
+    }
+
+    spanLine(): Int {
+        return this.currentLine()
+    }
+
+    spanCol(): Int {
+        return this.currentCol()
+    }
+
+    kindAt(offset: Int): Int {
+        var idx = this.pos + offset
+        if (idx >= this.tokens.len()) {
+            idx = this.tokens.len() - 1
+        }
+        var tok: Token = this.tokens.get(idx)
+        return tok.kind
+    }
+
+    textAt(offset: Int): String {
+        var idx = this.pos + offset
+        if (idx >= this.tokens.len()) {
+            idx = this.tokens.len() - 1
+        }
+        var tok: Token = this.tokens.get(idx)
+        return tok.text
+    }
+
+    advance(): Void {
+        if (this.pos < this.tokens.len() - 1) {
+            this.pos = this.pos + 1
+        }
+    }
+
+    expect(kind: Int): Void {
+        if (this.currentKind() != kind) {
+            var msg = "error de sintaxis en " + this.currentLine().toString() + ":" + this.currentCol().toString() + ": token inesperado " + this.currentText()
+            this.addParseError(msg, this.currentLine(), this.currentCol())
+        }
+        this.advance()
+    }
+
+    isNameToken(k: Int): Bool {
+        return k == TK_IDENT || k == TK_VALUE || k == TK_DATA
+    }
+
+    expectIdent(): String {
+        if (!this.isNameToken(this.currentKind())) {
+            var msg = "error de sintaxis en " + this.currentLine().toString() + ":" + this.currentCol().toString() + ": esperado identificador, encontrado " + this.currentText()
+            this.addParseError(msg, this.currentLine(), this.currentCol())
+        }
+        var name = this.currentText()
+        this.advance()
+        return name
+    }
+
+    expectPathSegment(): String {
+        var k = this.currentKind()
+        if (this.isNameToken(k)) {
+            var name = this.currentText()
+            this.advance()
+            return name
+        }
+        var msg = "error de sintaxis en " + this.currentLine().toString() + ":" + this.currentCol().toString() + ": esperado segmento de ruta, encontrado " + this.currentText()
+        this.addParseError(msg, this.currentLine(), this.currentCol())
+        var fallback = this.currentText()
+        this.advance()
+        return fallback
+    }
+
+    skipSemis(): Void {
+        var running = true
+        while (running) {
+            if (this.currentKind() == TK_SEMI) {
+                this.advance()
+            } else {
+                running = false
+            }
+        }
+    }
+
+    isStmtStart(): Bool {
+        var k = this.currentKind()
+        return k == TK_VAR || k == TK_FINAL || k == TK_RETURN || k == TK_BREAK ||
+               k == TK_CONTINUE || k == TK_IF || k == TK_WHILE || k == TK_FOR ||
+               k == TK_SWITCH || k == TK_TRY || k == TK_THROW ||
+               k == TK_RBRACE || k == TK_EOF
+    }
+
+    isFunctionStart(): Bool {
+        if (!this.isNameToken(this.currentKind())) {
+            return false
+        }
+        var k1 = this.kindAt(1)
+        return k1 == TK_LPAREN || k1 == TK_LT
+    }
+
+    parseProgram(): Program {
+        var items: List = List()
+        this.skipSemis()
+        while (this.currentKind() != TK_EOF) {
+            var item: Item = this.parseItem()
+            items.push(item)
+            this.skipSemis()
+        }
+        return Program(items: items, parse_errors: this.errors)
+    }
+
+    parseAnnotations(): List {
+        var anns: List = List()
+        while (this.currentKind() == TK_AT) {
+            this.advance()
+            if (this.currentKind() == TK_IDENT) {
+                var annLn = this.spanLine()
+                var annCl = this.spanCol()
+                var name = this.currentText()
+                this.advance()
+                var ann = makeAnnotation(name: name, line: annLn, col: annCl)
+                anns.push(ann)
+            }
+        }
+        return anns
+    }
+
+    parseItem(): Item {
+        var anns: List = this.parseAnnotations()
+        var k = this.currentKind()
+        if (k == TK_MODULE) {
+            return this.parseModuleDecl(anns)
+        }
+        if (k == TK_IMPORT) {
+            return this.parseImportDecl(anns)
+        }
+        if (k == TK_CLASS) {
+            return this.parseClassDecl(anns)
+        }
+        if (k == TK_DATA) {
+            return this.parseDataDecl(anns)
+        }
+        if (k == TK_VALUE) {
+            return this.parseValueDecl(anns)
+        }
+        if (k == TK_INTERFACE) {
+            return this.parseInterfaceDecl(anns)
+        }
+        if (k == TK_ANNOTATION) {
+            return this.parseAnnotationDecl(anns)
+        }
+        if (k == TK_FINAL || k == TK_VAR) {
+            return this.parseGlobalConst(anns)
+        }
+        if (k == TK_IDENT) {
+            return this.parseFunctionItem(anns)
+        }
+        var msg = "elemento inesperado en " + this.currentLine().toString() + ":" + this.currentCol().toString() + ": " + this.currentText()
+        this.addParseError(msg, this.currentLine(), this.currentCol())
+        this.advance()
+        return makeErrorItem()
+    }
+
+    parseModuleDecl(anns: List): Item {
+        this.expect(TK_MODULE)
+        var path: List = this.parseDotPath()
+        this.skipSemis()
+        var it = Item(kind: ITEM_MODULE, module_path: listToPath(path), import_path: "",
+            class_decl: null, data_decl: null, interface_decl: null,
+            function_decl: null, global_const: null)
+        return it
+    }
+
+    parseImportDecl(anns: List): Item {
+        this.expect(TK_IMPORT)
+        var path: List = this.parseDotPath()
+        this.skipSemis()
+        var it = Item(kind: ITEM_IMPORT, module_path: "", import_path: listToPath(path),
+            class_decl: null, data_decl: null, interface_decl: null,
+            function_decl: null, global_const: null)
+        return it
+    }
+
+    parseDotPath(): List {
+        var parts: List = List()
+        var first = this.expectPathSegment()
+        parts.push(first)
+        var running = true
+        while (running) {
+            if (this.currentKind() == TK_DOT) {
+                var nk = this.kindAt(1)
+                if (this.isNameToken(nk)) {
+                    this.advance()
+                    var part = this.expectPathSegment()
+                    parts.push(part)
+                } else {
+                    running = false
+                }
+            } else {
+                running = false
+            }
+        }
+        return parts
+    }
+
+    parseGlobalConst(anns: List): Item {
+        var isFinal = this.currentKind() == TK_FINAL
+        this.advance()
+        var name = this.expectIdent()
+        var ty = ""
+        if (this.currentKind() == TK_COLON) {
+            this.advance()
+            ty = this.parseTypeName()
+        }
+        this.expect(TK_EQ)
+        var val: Expr = this.parseExpr()
+        this.skipSemis()
+        var gc = GlobalConst(is_final: isFinal, name: name, ty: ty, const_val: val)
+        var it = Item(kind: ITEM_GLOBAL, module_path: "", import_path: "",
+            class_decl: null, data_decl: null, interface_decl: null,
+            function_decl: null, global_const: gc)
+        return it
+    }
+
+    parseClassDecl(anns: List): Item {
+        this.expect(TK_CLASS)
+        var cdLn = this.spanLine()
+        var cdCl = this.spanCol()
+        var name = this.expectIdent()
+        var typeParams: List = this.parseTypeParamsOpt()
+        var primaryParams: List = List()
+        if (this.currentKind() == TK_LPAREN) {
+            this.advance()
+            primaryParams = this.parseFieldList()
+            this.expect(TK_RPAREN)
+        }
+        var extendsType = ""
+        if (this.currentKind() == TK_EXTENDS) {
+            this.advance()
+            extendsType = this.parseTypeName()
+        }
+        var implementsTypes: List = List()
+        if (this.currentKind() == TK_IMPLEMENTS) {
+            this.advance()
+            var t = this.parseTypeName()
+            implementsTypes.push(t)
+            while (this.currentKind() == TK_COMMA) {
+                this.advance()
+                var t2 = this.parseTypeName()
+                implementsTypes.push(t2)
+            }
+        }
+        this.expect(TK_LBRACE)
+        var methods: List = List()
+        var fields: List = List()
+        this.skipSemis()
+        while (this.currentKind() != TK_RBRACE && this.currentKind() != TK_EOF) {
+            var mAnns: List = this.parseAnnotations()
+            if (this.isFunctionStart()) {
+                var fn: Function = this.parseFunction(mAnns)
+                methods.push(fn)
+            } else if (this.isNameToken(this.currentKind())) {
+                var f: FieldDecl = this.parseSingleField()
+                fields.push(f)
+                this.skipSemis()
+            } else {
+                this.advance()
+            }
+        }
+        this.expect(TK_RBRACE)
+        var cd = ClassDecl(annotations: anns, name: name, type_params: typeParams,
+            primary_params: primaryParams, extends_type: extendsType,
+            implements_types: implementsTypes, methods: methods, fields: fields,
+            line: cdLn, col: cdCl)
+        var it = Item(kind: ITEM_CLASS, module_path: "", import_path: "",
+            class_decl: cd, data_decl: null, interface_decl: null,
+            function_decl: null, global_const: null)
+        return it
+    }
+
+    parseDataDecl(anns: List): Item {
+        this.expect(TK_DATA)
+        var ddLn = this.spanLine()
+        var ddCl = this.spanCol()
+        var name = this.expectIdent()
+        this.expect(TK_LBRACE)
+        var fields: List = this.parseFieldBody()
+        this.expect(TK_RBRACE)
+        var dd = DataDecl(annotations: anns, name: name, fields: fields, line: ddLn, col: ddCl)
+        var it = Item(kind: ITEM_DATA, module_path: "", import_path: "",
+            class_decl: null, data_decl: dd, interface_decl: null,
+            function_decl: null, global_const: null)
+        return it
+    }
+
+    parseValueDecl(anns: List): Item {
+        this.expect(TK_VALUE)
+        var ddLn = this.spanLine()
+        var ddCl = this.spanCol()
+        var name = this.expectIdent()
+        this.expect(TK_LBRACE)
+        var fields: List = this.parseFieldBody()
+        this.expect(TK_RBRACE)
+        var dd = DataDecl(annotations: anns, name: name, fields: fields, line: ddLn, col: ddCl)
+        var it = Item(kind: ITEM_VALUE, module_path: "", import_path: "",
+            class_decl: null, data_decl: dd, interface_decl: null,
+            function_decl: null, global_const: null)
+        return it
+    }
+
+    parseFieldBody(): List {
+        var fields: List = List()
+        this.skipSemis()
+        while (this.currentKind() != TK_RBRACE && this.currentKind() != TK_EOF) {
+            var f: FieldDecl = this.parseSingleField()
+            fields.push(f)
+            this.skipSemis()
+        }
+        return fields
+    }
+
+    parseSingleField(): FieldDecl {
+        var fLn = this.spanLine()
+        var fCl = this.spanCol()
+        var name = this.expectIdent()
+        this.expect(TK_COLON)
+        var ty = this.parseTypeName()
+        return FieldDecl(name: name, ty: ty, line: fLn, col: fCl)
+    }
+
+    parseFieldList(): List {
+        var fields: List = List()
+        if (this.currentKind() == TK_RPAREN) {
+            return fields
+        }
+        var f: FieldDecl = this.parseSingleField()
+        fields.push(f)
+        while (this.currentKind() == TK_COMMA) {
+            this.advance()
+            if (this.currentKind() == TK_RPAREN) {
+                return fields
+            }
+            var f2: FieldDecl = this.parseSingleField()
+            fields.push(f2)
+        }
+        return fields
+    }
+
+    parseInterfaceDecl(anns: List): Item {
+        this.expect(TK_INTERFACE)
+        var name = this.expectIdent()
+        var typeParams: List = this.parseTypeParamsOpt()
+        this.expect(TK_LBRACE)
+        var sigs: List = List()
+        this.skipSemis()
+        while (this.currentKind() != TK_RBRACE && this.currentKind() != TK_EOF) {
+            var mAnns: List = this.parseAnnotations()
+            var sig: Param = this.parseMethodSig(mAnns)
+            sigs.push(sig)
+            this.skipSemis()
+        }
+        this.expect(TK_RBRACE)
+        var id = InterfaceDecl(annotations: anns, name: name, type_params: typeParams, method_sigs: sigs)
+        var it = Item(kind: ITEM_INTERFACE, module_path: "", import_path: "",
+            class_decl: null, data_decl: null, interface_decl: id,
+            function_decl: null, global_const: null)
+        return it
+    }
+
+    parseMethodSig(anns: List): Param {
+        var pLn = this.spanLine()
+        var pCl = this.spanCol()
+        var name = this.expectIdent()
+        this.parseTypeParamsOpt()
+        this.expect(TK_LPAREN)
+        var params: List = this.parseParams()
+        this.expect(TK_RPAREN)
+        var retTy = ""
+        if (this.currentKind() == TK_COLON) {
+            this.advance()
+            retTy = this.parseTypeName()
+        }
+        this.skipSemis()
+        return Param(name: name, ty: retTy, line: pLn, col: pCl)
+    }
+
+    parseAnnotationDecl(anns: List): Item {
+        this.expect(TK_ANNOTATION)
+        var ddLn = this.spanLine()
+        var ddCl = this.spanCol()
+        var name = this.expectIdent()
+        var fields: List = List()
+        if (this.currentKind() == TK_LBRACE) {
+            this.advance()
+            fields = this.parseFieldBody()
+            this.expect(TK_RBRACE)
+        }
+        var dd = DataDecl(annotations: anns, name: name, fields: fields, line: ddLn, col: ddCl)
+        var it = Item(kind: ITEM_ANNOTATION, module_path: "", import_path: "",
+            class_decl: null, data_decl: dd, interface_decl: null,
+            function_decl: null, global_const: null)
+        return it
+    }
+
+    parseTypeParamsOpt(): List {
+        var params: List = List()
+        if (this.currentKind() != TK_LT) {
+            return params
+        }
+        this.advance()
+        var name = this.expectIdent()
+        params.push(name)
+        if (this.currentKind() == TK_EXTENDS) {
+            this.advance()
+            this.parseTypeName()
+        }
+        while (this.currentKind() == TK_COMMA) {
+            this.advance()
+            if (this.currentKind() == TK_GT) {
+                return params
+            }
+            var name2 = this.expectIdent()
+            params.push(name2)
+            if (this.currentKind() == TK_EXTENDS) {
+                this.advance()
+                this.parseTypeName()
+            }
+        }
+        this.expect(TK_GT)
+        return params
+    }
+
+    parseFunctionItem(anns: List): Item {
+        var fn: Function = this.parseFunction(anns)
+        var it = Item(kind: ITEM_FUNCTION, module_path: "", import_path: "",
+            class_decl: null, data_decl: null, interface_decl: null,
+            function_decl: fn, global_const: null)
+        return it
+    }
+
+    parseFunction(anns: List): Function {
+        var fnLn = this.spanLine()
+        var fnCl = this.spanCol()
+        var name = this.expectIdent()
+        this.parseTypeParamsOpt()
+        this.expect(TK_LPAREN)
+        var params: List = this.parseParams()
+        this.expect(TK_RPAREN)
+        var retTy = ""
+        if (this.currentKind() == TK_COLON) {
+            this.advance()
+            retTy = this.parseTypeName()
+        }
+        var stmts: List = List()
+        var bodyExpr: Expr? = null
+        var isBlock = true
+        if (this.currentKind() == TK_FAT_ARROW) {
+            this.advance()
+            bodyExpr = this.parseExpr()
+            isBlock = false
+        } else {
+            stmts = this.parseBlock()
+        }
+        return Function(annotations: anns, name: name, params: params,
+            return_type: retTy, is_block_body: isBlock,
+            stmts: stmts, body_expr: bodyExpr, line: fnLn, col: fnCl)
+    }
+
+    parseParams(): List {
+        var params: List = List()
+        if (this.currentKind() == TK_RPAREN) {
+            return params
+        }
+        var p: Param = this.parseParam()
+        params.push(p)
+        while (this.currentKind() == TK_COMMA) {
+            this.advance()
+            if (this.currentKind() == TK_RPAREN) {
+                return params
+            }
+            var p2: Param = this.parseParam()
+            params.push(p2)
+        }
+        return params
+    }
+
+    parseParam(): Param {
+        var pLn = this.spanLine()
+        var pCl = this.spanCol()
+        var name = this.expectIdent()
+        this.expect(TK_COLON)
+        var ty = this.parseTypeName()
+        return Param(name: name, ty: ty, line: pLn, col: pCl)
+    }
+
+    parseTypeName(): String {
+        var parts: List = List()
+        var first = this.expectIdent()
+        parts.push(first)
+        while (this.currentKind() == TK_DOT && this.kindAt(1) == TK_IDENT) {
+            this.advance()
+            var part = this.expectIdent()
+            parts.push(part)
+        }
+        var base = listToPath(parts)
+        if (this.currentKind() == TK_LT) {
+            this.advance()
+            var arg1 = this.parseTypeName()
+            base = base + "<" + arg1
+            while (this.currentKind() == TK_COMMA) {
+                this.advance()
+                if (this.currentKind() == TK_GT) {
+                    base = base + ">"
+                    this.advance()
+                    return appendNullable(base, false)
+                }
+                var arg2 = this.parseTypeName()
+                base = base + "," + arg2
+            }
+            this.expect(TK_GT)
+            base = base + ">"
+        }
+        if (this.currentKind() == TK_QUESTION) {
+            this.advance()
+            return base + "?"
+        }
+        return base
+    }
+
+    parseBlock(): List {
+        this.expect(TK_LBRACE)
+        var stmts: List = List()
+        this.skipSemis()
+        while (this.currentKind() != TK_RBRACE && this.currentKind() != TK_EOF) {
+            var s: Stmt = this.parseStmt()
+            stmts.push(s)
+            this.skipSemis()
+        }
+        this.expect(TK_RBRACE)
+        return stmts
+    }
+
+    parseStmt(): Stmt {
+        var k = this.currentKind()
+        if (k == TK_VAR) {
+            return this.parseVarStmt(false)
+        }
+        if (k == TK_FINAL) {
+            return this.parseVarStmt(true)
+        }
+        if (k == TK_RETURN) {
+            return this.parseReturnStmt()
+        }
+        if (k == TK_BREAK) {
+            var brLn = this.spanLine()
+            var brCl = this.spanCol()
+            this.advance()
+            this.skipSemis()
+            return makeBreakStmt(line: brLn, col: brCl)
+        }
+        if (k == TK_CONTINUE) {
+            var coLn = this.spanLine()
+            var coCl = this.spanCol()
+            this.advance()
+            this.skipSemis()
+            return makeContinueStmt(line: coLn, col: coCl)
+        }
+        if (k == TK_IF) {
+            return this.parseIfStmt()
+        }
+        if (k == TK_WHILE) {
+            return this.parseWhileStmt()
+        }
+        if (k == TK_FOR) {
+            return this.parseForStmt()
+        }
+        if (k == TK_SWITCH) {
+            return this.parseSwitchStmt()
+        }
+        if (k == TK_TRY) {
+            return this.parseTryStmt()
+        }
+        if (k == TK_THROW) {
+            return this.parseThrowStmt()
+        }
+        return this.parseExprStmt()
+    }
+
+    parseVarStmt(isFinal: Bool): Stmt {
+        var vsLn = this.spanLine()
+        var vsCl = this.spanCol()
+        this.advance()
+        var name = this.expectIdent()
+        var ty = ""
+        if (this.currentKind() == TK_COLON) {
+            this.advance()
+            ty = this.parseTypeName()
+        }
+        this.expect(TK_EQ)
+        var val: Expr = this.parseExpr()
+        this.skipSemis()
+        return makeVarStmt(isFinal: isFinal, name: name, ty: ty, val: val, line: vsLn, col: vsCl)
+    }
+
+    parseReturnStmt(): Stmt {
+        var rsLn = this.spanLine()
+        var rsCl = this.spanCol()
+        this.advance()
+        var val: Expr? = null
+        if (!this.isStmtStart() && this.currentKind() != TK_SEMI) {
+            val = this.parseExpr()
+        }
+        this.skipSemis()
+        return makeReturnStmt(val: val, line: rsLn, col: rsCl)
+    }
+
+    parseIfStmt(): Stmt {
+        var ifLn = this.spanLine()
+        var ifCl = this.spanCol()
+        this.expect(TK_IF)
+        this.expect(TK_LPAREN)
+        var cond: Expr = this.parseExpr()
+        this.expect(TK_RPAREN)
+        var thenStmts: List = this.parseBlock()
+        var elseStmts: List = List()
+        if (this.currentKind() == TK_ELSE) {
+            this.advance()
+            if (this.currentKind() == TK_IF) {
+                var nested: Stmt = this.parseIfStmt()
+                elseStmts.push(nested)
+            } else {
+                elseStmts = this.parseBlock()
+            }
+        }
+        return makeIfStmt(cond: cond, thenStmts: thenStmts, elseStmts: elseStmts, line: ifLn, col: ifCl)
+    }
+
+    parseWhileStmt(): Stmt {
+        var whLn = this.spanLine()
+        var whCl = this.spanCol()
+        this.expect(TK_WHILE)
+        this.expect(TK_LPAREN)
+        var cond: Expr = this.parseExpr()
+        this.expect(TK_RPAREN)
+        var body: List = this.parseBlock()
+        return makeWhileStmt(cond: cond, body: body, line: whLn, col: whCl)
+    }
+
+    parseForStmt(): Stmt {
+        var foLn = this.spanLine()
+        var foCl = this.spanCol()
+        this.expect(TK_FOR)
+        var v = this.expectIdent()
+        this.expect(TK_IN)
+        var iter: Expr = this.parseExpr()
+        var body: List = this.parseBlock()
+        return makeForStmt(forVar: v, iterable: iter, body: body, line: foLn, col: foCl)
+    }
+
+    parseTryStmt(): Stmt {
+        var trLn = this.spanLine()
+        var trCl = this.spanCol()
+        this.expect(TK_TRY)
+        var tryStmts: List = this.parseBlock()
+        this.expect(TK_CATCH)
+        this.expect(TK_LPAREN)
+        var catchVar = this.expectIdent()
+        this.expect(TK_RPAREN)
+        var catchStmts: List = this.parseBlock()
+        return makeTryStmt(tryStmts: tryStmts, catchVar: catchVar, catchStmts: catchStmts, line: trLn, col: trCl)
+    }
+
+    parseThrowStmt(): Stmt {
+        var thLn = this.spanLine()
+        var thCl = this.spanCol()
+        this.advance()
+        this.skipSemis()
+        return makeThrowStmt(line: thLn, col: thCl)
+    }
+
+    parseSwitchStmt(): Stmt {
+        var swLn = this.spanLine()
+        var swCl = this.spanCol()
+        this.expect(TK_SWITCH)
+        this.expect(TK_LPAREN)
+        var subj: Expr = this.parseExpr()
+        this.expect(TK_RPAREN)
+        this.expect(TK_LBRACE)
+        var arms: List = List()
+        this.skipSemis()
+        while (this.currentKind() != TK_RBRACE && this.currentKind() != TK_EOF) {
+            var arm: SwitchArm = this.parseSwitchArm()
+            arms.push(arm)
+            this.skipSemis()
+        }
+        this.expect(TK_RBRACE)
+        return makeSwitchStmt(subject: subj, arms: arms, line: swLn, col: swCl)
+    }
+
+    parseSwitchArm(): SwitchArm {
+        var isDefault = false
+        var pat: Expr? = null
+        if (this.currentKind() == TK_DEFAULT) {
+            this.advance()
+            isDefault = true
+        } else {
+            this.expect(TK_CASE)
+            pat = this.parseExpr()
+        }
+        this.expect(TK_ARROW)
+        var stmts: List = List()
+        if (this.currentKind() == TK_LBRACE) {
+            stmts = this.parseBlock()
+        } else {
+            var e: Expr = this.parseExpr()
+            var esLn = e.line
+            var esCl = e.col
+            var es: Stmt = makeExprStmt(e: e, assign: null, line: esLn, col: esCl)
+            stmts.push(es)
+        }
+        this.skipSemis()
+        return SwitchArm(is_default: isDefault, pattern: pat, stmts: stmts)
+    }
+
+    parseExprStmt(): Stmt {
+        var esLn = this.spanLine()
+        var esCl = this.spanCol()
+        var e: Expr = this.parseExpr()
+        var assign: Expr? = null
+        if (this.currentKind() == TK_EQ) {
+            this.advance()
+            assign = this.parseExpr()
+        }
+        this.skipSemis()
+        return makeExprStmt(e: e, assign: assign, line: esLn, col: esCl)
+    }
+
+    parseExpr(): Expr {
+        return this.parseElvis()
+    }
+
+    parseElvis(): Expr {
+        var left: Expr = this.parseOr()
+        if (this.currentKind() == TK_QUESTION_COLON) {
+            var elLn = this.spanLine()
+            var elCl = this.spanCol()
+            this.advance()
+            var right: Expr = this.parseOr()
+            return makeExprBinary(op: OP_OR, l: left, r: right, line: elLn, col: elCl)
+        }
+        return left
+    }
+
+    parseOr(): Expr {
+        var left: Expr = this.parseAnd()
+        while (this.currentKind() == TK_OROR) {
+            var orLn = this.spanLine()
+            var orCl = this.spanCol()
+            this.advance()
+            var right: Expr = this.parseAnd()
+            left = makeExprBinary(op: OP_OR, l: left, r: right, line: orLn, col: orCl)
+        }
+        return left
+    }
+
+    parseAnd(): Expr {
+        var left: Expr = this.parseEquality()
+        while (this.currentKind() == TK_ANDAND) {
+            var anLn = this.spanLine()
+            var anCl = this.spanCol()
+            this.advance()
+            var right: Expr = this.parseEquality()
+            left = makeExprBinary(op: OP_AND, l: left, r: right, line: anLn, col: anCl)
+        }
+        return left
+    }
+
+    parseEquality(): Expr {
+        var left: Expr = this.parseComparison()
+        var running = true
+        while (running) {
+            if (this.currentKind() == TK_EQEQ) {
+                var eqLn = this.spanLine()
+                var eqCl = this.spanCol()
+                this.advance()
+                var right: Expr = this.parseComparison()
+                left = makeExprBinary(op: OP_EQ, l: left, r: right, line: eqLn, col: eqCl)
+            } else if (this.currentKind() == TK_BANGEQ) {
+                var neLn = this.spanLine()
+                var neCl = this.spanCol()
+                this.advance()
+                var right2: Expr = this.parseComparison()
+                left = makeExprBinary(op: OP_NE, l: left, r: right2, line: neLn, col: neCl)
+            } else {
+                running = false
+            }
+        }
+        return left
+    }
+
+    parseComparison(): Expr {
+        var left: Expr = this.parseTerm()
+        var running = true
+        while (running) {
+            if (this.currentKind() == TK_LT) {
+                var ltLn = this.spanLine()
+                var ltCl = this.spanCol()
+                this.advance()
+                var right: Expr = this.parseTerm()
+                left = makeExprBinary(op: OP_LT, l: left, r: right, line: ltLn, col: ltCl)
+            } else if (this.currentKind() == TK_LTEQ) {
+                var leLn = this.spanLine()
+                var leCl = this.spanCol()
+                this.advance()
+                var right2: Expr = this.parseTerm()
+                left = makeExprBinary(op: OP_LE, l: left, r: right2, line: leLn, col: leCl)
+            } else if (this.currentKind() == TK_GT) {
+                var gtLn = this.spanLine()
+                var gtCl = this.spanCol()
+                this.advance()
+                var right3: Expr = this.parseTerm()
+                left = makeExprBinary(op: OP_GT, l: left, r: right3, line: gtLn, col: gtCl)
+            } else if (this.currentKind() == TK_GTEQ) {
+                var geLn = this.spanLine()
+                var geCl = this.spanCol()
+                this.advance()
+                var right4: Expr = this.parseTerm()
+                left = makeExprBinary(op: OP_GE, l: left, r: right4, line: geLn, col: geCl)
+            } else {
+                running = false
+            }
+        }
+        return left
+    }
+
+    parseTerm(): Expr {
+        var left: Expr = this.parseFactor()
+        var running = true
+        while (running) {
+            if (this.currentKind() == TK_PLUS) {
+                var adLn = this.spanLine()
+                var adCl = this.spanCol()
+                this.advance()
+                var right: Expr = this.parseFactor()
+                left = makeExprBinary(op: OP_ADD, l: left, r: right, line: adLn, col: adCl)
+            } else if (this.currentKind() == TK_MINUS) {
+                var suLn = this.spanLine()
+                var suCl = this.spanCol()
+                this.advance()
+                var right2: Expr = this.parseFactor()
+                left = makeExprBinary(op: OP_SUB, l: left, r: right2, line: suLn, col: suCl)
+            } else {
+                running = false
+            }
+        }
+        return left
+    }
+
+    parseFactor(): Expr {
+        var left: Expr = this.parseUnary()
+        var running = true
+        while (running) {
+            if (this.currentKind() == TK_STAR) {
+                var muLn = this.spanLine()
+                var muCl = this.spanCol()
+                this.advance()
+                var right: Expr = this.parseUnary()
+                left = makeExprBinary(op: OP_MUL, l: left, r: right, line: muLn, col: muCl)
+            } else if (this.currentKind() == TK_SLASH) {
+                var diLn = this.spanLine()
+                var diCl = this.spanCol()
+                this.advance()
+                var right2: Expr = this.parseUnary()
+                left = makeExprBinary(op: OP_DIV, l: left, r: right2, line: diLn, col: diCl)
+            } else if (this.currentKind() == TK_PERCENT) {
+                var moLn = this.spanLine()
+                var moCl = this.spanCol()
+                this.advance()
+                var right3: Expr = this.parseUnary()
+                left = makeExprBinary(op: OP_MOD, l: left, r: right3, line: moLn, col: moCl)
+            } else {
+                running = false
+            }
+        }
+        return left
+    }
+
+    parseUnary(): Expr {
+        if (this.currentKind() == TK_BANG) {
+            var unLn = this.spanLine()
+            var unCl = this.spanCol()
+            this.advance()
+            var inner: Expr = this.parseUnary()
+            var e = Expr(kind: EXPR_UNARY, int_val: 0, float_val: "", str_val: "",
+                char_val: "", bool_val: false, op: OP_NOT, left: inner, right: null,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: unLn, col: unCl)
+            return e
+        }
+        if (this.currentKind() == TK_MINUS) {
+            var un2Ln = this.spanLine()
+            var un2Cl = this.spanCol()
+            this.advance()
+            var inner2: Expr = this.parseUnary()
+            var e2 = Expr(kind: EXPR_UNARY, int_val: 0, float_val: "", str_val: "",
+                char_val: "", bool_val: false, op: OP_NEG, left: inner2, right: null,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: un2Ln, col: un2Cl)
+            return e2
+        }
+        return this.parsePostfix()
+    }
+
+    parsePostfix(): Expr {
+        var expr: Expr = this.parsePrimary()
+        var running = true
+        while (running) {
+            if (this.currentKind() == TK_DOT) {
+                var dotLn = this.spanLine()
+                var dotCl = this.spanCol()
+                this.advance()
+                var field = this.expectIdent()
+                if (this.currentKind() == TK_LPAREN) {
+                    var callArgs: List = this.parseCallArgs()
+                    var e = Expr(kind: EXPR_METHOD, int_val: 0, float_val: "", str_val: "",
+                        char_val: "", bool_val: false, op: 0, left: null, right: null,
+                        callee: null, receiver: expr, method_name: field, field_name: "",
+                        args: callArgs, path_parts: List(), elems: List(),
+                        lambda_params: List(), is_safe: false, line: dotLn, col: dotCl)
+                    expr = e
+                } else {
+                    var e2 = Expr(kind: EXPR_FIELD, int_val: 0, float_val: "", str_val: "",
+                        char_val: "", bool_val: false, op: 0, left: null, right: null,
+                        callee: null, receiver: expr, method_name: "", field_name: field,
+                        args: List(), path_parts: List(), elems: List(),
+                        lambda_params: List(), is_safe: false, line: dotLn, col: dotCl)
+                    expr = e2
+                }
+            } else if (this.currentKind() == TK_QUESTION_DOT) {
+                var qdLn = this.spanLine()
+                var qdCl = this.spanCol()
+                this.advance()
+                var field3 = this.expectIdent()
+                if (this.currentKind() == TK_LPAREN) {
+                    var callArgs2: List = this.parseCallArgs()
+                    var e3 = Expr(kind: EXPR_METHOD, int_val: 0, float_val: "", str_val: "",
+                        char_val: "", bool_val: false, op: 0, left: null, right: null,
+                        callee: null, receiver: expr, method_name: field3, field_name: "",
+                        args: callArgs2, path_parts: List(), elems: List(),
+                        lambda_params: List(), is_safe: true, line: qdLn, col: qdCl)
+                    expr = e3
+                } else {
+                    var e4 = Expr(kind: EXPR_FIELD, int_val: 0, float_val: "", str_val: "",
+                        char_val: "", bool_val: false, op: 0, left: null, right: null,
+                        callee: null, receiver: expr, method_name: "", field_name: field3,
+                        args: List(), path_parts: List(), elems: List(),
+                        lambda_params: List(), is_safe: true, line: qdLn, col: qdCl)
+                    expr = e4
+                }
+            } else if (this.currentKind() == TK_LPAREN) {
+                var caLn = this.spanLine()
+                var caCl = this.spanCol()
+                var callArgs3: List = this.parseCallArgs()
+                var e5 = Expr(kind: EXPR_CALL, int_val: 0, float_val: "", str_val: "",
+                    char_val: "", bool_val: false, op: 0, left: null, right: null,
+                    callee: expr, receiver: null, method_name: "", field_name: "",
+                    args: callArgs3, path_parts: List(), elems: List(),
+                    lambda_params: List(), is_safe: false, line: caLn, col: caCl)
+                expr = e5
+            } else if (this.currentKind() == TK_LBRACKET) {
+                var ixLn = this.spanLine()
+                var ixCl = this.spanCol()
+                this.advance()
+                var idx: Expr = this.parseExpr()
+                this.expect(TK_RBRACKET)
+                var e6 = Expr(kind: EXPR_INDEX, int_val: 0, float_val: "", str_val: "",
+                    char_val: "", bool_val: false, op: 0, left: expr, right: idx,
+                    callee: null, receiver: null, method_name: "", field_name: "",
+                    args: List(), path_parts: List(), elems: List(),
+                    lambda_params: List(), is_safe: false, line: ixLn, col: ixCl)
+                expr = e6
+            } else if (this.currentKind() == TK_BANG) {
+                var naLn = this.spanLine()
+                var naCl = this.spanCol()
+                this.advance()
+                var e7 = Expr(kind: EXPR_NULL_ASSERT, int_val: 0, float_val: "", str_val: "",
+                    char_val: "", bool_val: false, op: 0, left: expr, right: null,
+                    callee: null, receiver: null, method_name: "", field_name: "",
+                    args: List(), path_parts: List(), elems: List(),
+                    lambda_params: List(), is_safe: false, line: naLn, col: naCl)
+                expr = e7
+            } else {
+                running = false
+            }
+        }
+        return expr
+    }
+
+    parseCallArgs(): List {
+        this.expect(TK_LPAREN)
+        var args: List = List()
+        if (this.currentKind() != TK_RPAREN) {
+            var a: CallArg = this.parseCallArg()
+            args.push(a)
+            while (this.currentKind() == TK_COMMA) {
+                this.advance()
+                if (this.currentKind() == TK_RPAREN) {
+                    return args
+                }
+                var a2: CallArg = this.parseCallArg()
+                args.push(a2)
+            }
+        }
+        this.expect(TK_RPAREN)
+        return args
+    }
+
+    parseCallArg(): CallArg {
+        if (this.isNameToken(this.currentKind()) && this.kindAt(1) == TK_COLON) {
+            var name = this.currentText()
+            this.advance()
+            this.advance()
+            var val: Expr = this.parseExpr()
+            return makeNamedArg(name: name, v: val)
+        }
+        var val2: Expr = this.parseExpr()
+        return makePosArg(v: val2)
+    }
+
+    isLambdaParen(): Bool {
+        var i = this.pos + 1
+        var len = this.tokens.len()
+        var running = true
+        while (running) {
+            if (i >= len) {
+                return false
+            }
+            var tok: Token = this.tokens.get(i)
+            if (tok.kind == TK_RPAREN) {
+                var j = i + 1
+                if (j >= len) {
+                    return false
+                }
+                var next: Token = this.tokens.get(j)
+                return next.kind == TK_FAT_ARROW
+            }
+            if (this.isNameToken(tok.kind)) {
+                i = i + 1
+                if (i < len) {
+                    var after: Token = this.tokens.get(i)
+                    if (after.kind == TK_COMMA) {
+                        i = i + 1
+                    } else if (after.kind != TK_RPAREN) {
+                        return false
+                    }
+                }
+            } else {
+                return false
+            }
+        }
+        return false
+    }
+
+    parsePrimary(): Expr {
+        var k = this.currentKind()
+        if (k == TK_INT) {
+            var iLn = this.spanLine()
+            var iCl = this.spanCol()
+            var v = this.currentText().toInt()
+            this.advance()
+            return makeExprInt(v: v, line: iLn, col: iCl)
+        }
+        if (k == TK_FLOAT) {
+            var flLn = this.spanLine()
+            var flCl = this.spanCol()
+            var fv = this.currentText()
+            this.advance()
+            var e = Expr(kind: EXPR_FLOAT, int_val: 0, float_val: fv, str_val: "",
+                char_val: "", bool_val: false, op: 0, left: null, right: null,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: flLn, col: flCl)
+            return e
+        }
+        if (k == TK_STRING) {
+            var stLn = this.spanLine()
+            var stCl = this.spanCol()
+            var sv = this.currentText()
+            this.advance()
+            return makeExprString(v: sv, line: stLn, col: stCl)
+        }
+        if (k == TK_CHAR) {
+            var chLn = this.spanLine()
+            var chCl = this.spanCol()
+            var cv = this.currentText()
+            this.advance()
+            var e2 = Expr(kind: EXPR_CHAR, int_val: 0, float_val: "", str_val: "",
+                char_val: cv, bool_val: false, op: 0, left: null, right: null,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: chLn, col: chCl)
+            return e2
+        }
+        if (k == TK_TRUE) {
+            var trLn = this.spanLine()
+            var trCl = this.spanCol()
+            this.advance()
+            return makeExprBool(v: true, line: trLn, col: trCl)
+        }
+        if (k == TK_FALSE) {
+            var faLn = this.spanLine()
+            var faCl = this.spanCol()
+            this.advance()
+            return makeExprBool(v: false, line: faLn, col: faCl)
+        }
+        if (k == TK_NULL) {
+            var nuLn = this.spanLine()
+            var nuCl = this.spanCol()
+            this.advance()
+            var e3 = Expr(kind: EXPR_NULL, int_val: 0, float_val: "", str_val: "",
+                char_val: "", bool_val: false, op: 0, left: null, right: null,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: nuLn, col: nuCl)
+            return e3
+        }
+        if (k == TK_THIS) {
+            var thLn = this.spanLine()
+            var thCl = this.spanCol()
+            this.advance()
+            var e4 = Expr(kind: EXPR_THIS, int_val: 0, float_val: "", str_val: "",
+                char_val: "", bool_val: false, op: 0, left: null, right: null,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: thLn, col: thCl)
+            return e4
+        }
+        if (k == TK_SWITCH) {
+            var swLn = this.spanLine()
+            var swCl = this.spanCol()
+            var switchStmt: Stmt = this.parseSwitchStmt()
+            var e5 = Expr(kind: EXPR_SWITCH, int_val: 0, float_val: "", str_val: "",
+                char_val: "", bool_val: false, op: 0, left: null, right: null,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: swLn, col: swCl)
+            e5.args.push(switchStmt)
+            return e5
+        }
+        if (k == TK_LBRACKET) {
+            var liLn = this.spanLine()
+            var liCl = this.spanCol()
+            this.advance()
+            var elems: List = List()
+            if (this.currentKind() != TK_RBRACKET) {
+                var e6: Expr = this.parseExpr()
+                elems.push(e6)
+                while (this.currentKind() == TK_COMMA) {
+                    this.advance()
+                    if (this.currentKind() == TK_RBRACKET) {
+                        return makeExprList(elems: elems, line: liLn, col: liCl)
+                    }
+                    var e7: Expr = this.parseExpr()
+                    elems.push(e7)
+                }
+            }
+            this.expect(TK_RBRACKET)
+            return makeExprList(elems: elems, line: liLn, col: liCl)
+        }
+        if (k == TK_LPAREN) {
+            if (this.isLambdaParen()) {
+                var laLn = this.spanLine()
+                var laCl = this.spanCol()
+                this.advance()
+                var lparams: List = List()
+                while (this.isNameToken(this.currentKind())) {
+                    var pname = this.currentText()
+                    this.advance()
+                    lparams.push(pname)
+                    if (this.currentKind() == TK_COMMA) {
+                        this.advance()
+                    }
+                }
+                this.expect(TK_RPAREN)
+                this.expect(TK_FAT_ARROW)
+                var lbody: Expr = this.parseExpr()
+                var le = Expr(kind: EXPR_LAMBDA, int_val: 0, float_val: "", str_val: "",
+                    char_val: "", bool_val: false, op: 0, left: lbody, right: null,
+                    callee: null, receiver: null, method_name: "", field_name: "",
+                    args: List(), path_parts: List(), elems: List(),
+                    lambda_params: lparams, is_safe: false, line: laLn, col: laCl)
+                return le
+            }
+            this.advance()
+            var inner: Expr = this.parseExpr()
+            this.expect(TK_RPAREN)
+            return inner
+        }
+        if (this.isNameToken(k)) {
+            if (this.kindAt(1) == TK_FAT_ARROW) {
+                var la2Ln = this.spanLine()
+                var la2Cl = this.spanCol()
+                var lpname = this.currentText()
+                this.advance()
+                this.advance()
+                var lbody2: Expr = this.parseExpr()
+                var lparams2: List = List()
+                lparams2.push(lpname)
+                var le2 = Expr(kind: EXPR_LAMBDA, int_val: 0, float_val: "", str_val: "",
+                    char_val: "", bool_val: false, op: 0, left: lbody2, right: null,
+                    callee: null, receiver: null, method_name: "", field_name: "",
+                    args: List(), path_parts: List(), elems: List(),
+                    lambda_params: lparams2, is_safe: false, line: la2Ln, col: la2Cl)
+                return le2
+            }
+            var paLn = this.spanLine()
+            var paCl = this.spanCol()
+            var name = this.currentText()
+            this.advance()
+            var parts: List = List()
+            parts.push(name)
+            return makeExprPath(parts: parts, line: paLn, col: paCl)
+        }
+        var msg = "expresion inesperada en " + this.currentLine().toString() + ":" + this.currentCol().toString() + ": " + this.currentText()
+        this.addParseError(msg, this.currentLine(), this.currentCol())
+        var erLn = this.spanLine()
+        var erCl = this.spanCol()
+        this.advance()
+        return makeExprInt(v: 0, line: erLn, col: erCl)
+    }
+}
+
+listToPath(parts: List): String {
+    var result = ""
+    var i = 0
+    while (i < parts.len()) {
+        if (i > 0) {
+            result = result + "."
+        }
+        var part: String = parts.get(i)
+        result = result + part
+        i = i + 1
+    }
+    return result
+}
+
+appendNullable(base: String, nullable: Bool): String {
+    if (nullable) {
+        return base + "?"
+    }
+    return base
+}
+
+makeAnnotation(name: String, line: Int, col: Int): Param {
+    return Param(name: name, ty: "", line: line, col: col)
+}
+
+makeErrorItem(): Item {
+    return Item(kind: ITEM_IMPORT, module_path: "", import_path: "error",
+        class_decl: null, data_decl: null, interface_decl: null,
+        function_decl: null, global_const: null)
+}
+
+makeBreakStmt(line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_BREAK, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeContinueStmt(line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_CONTINUE, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeVarStmt(isFinal: Bool, name: String, ty: String, val: Expr, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_VAR, is_final: isFinal, var_name: name, var_type: ty,
+        init_val: val, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeReturnStmt(val: Expr?, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_RETURN, is_final: false, var_name: "", var_type: "",
+        init_val: val, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeIfStmt(cond: Expr, thenStmts: List, elseStmts: List, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_IF, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: cond, then_stmts: thenStmts, else_stmts: elseStmts,
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeWhileStmt(cond: Expr, body: List, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_WHILE, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: cond, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: body,
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeForStmt(forVar: String, iterable: Expr, body: List, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_FOR, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: forVar, iterable: iterable, body_stmts: body,
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeSwitchStmt(subject: Expr, arms: List, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_SWITCH, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: subject, switch_arms: arms, expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeTryStmt(tryStmts: List, catchVar: String, catchStmts: List, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_TRY, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: null, then_stmts: tryStmts, else_stmts: catchStmts,
+        for_var: catchVar, iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeThrowStmt(line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_THROW, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
+        line: line, col: col)
+}
+
+makeExprStmt(e: Expr, assign: Expr?, line: Int, col: Int): Stmt {
+    return Stmt(kind: STMT_EXPR, is_final: false, var_name: "", var_type: "",
+        init_val: null, cond: null, then_stmts: List(), else_stmts: List(),
+        for_var: "", iterable: null, body_stmts: List(),
+        switch_subject: null, switch_arms: List(), expr: e, assign_val: assign,
+        line: line, col: col)
+}
+
+makeExprList(elems: List, line: Int, col: Int): Expr {
+    var e = Expr(kind: EXPR_LIST, int_val: 0, float_val: "", str_val: "",
+        char_val: "", bool_val: false, op: 0, left: null, right: null,
+        callee: null, receiver: null, method_name: "", field_name: "",
+        args: List(), path_parts: List(), elems: elems,
+        lambda_params: List(), is_safe: false, line: line, col: col)
+    return e
+}
+
+parseSource(tokens: List): Program {
+    var errors = List()
+    var parser = Parser(tokens: tokens, pos: 0, errors: errors)
+    return parser.parseProgram()
+}

@@ -1,0 +1,7 @@
+parseInt(s: String): Int {
+    return s.toInt()
+}
+
+formatInt(n: Int): String {
+    return n.toString()
+}

@@ -1,0 +1,114 @@
+import std.json.value
+import std.json.access
+
+class DocumentStore(uris: List, sources: List) {
+
+    set(uri: String, text: String): Void {
+        var i = 0
+        while (i < this.uris.len()) {
+            var u: String = this.uris.get(i)
+            if (u == uri) {
+                this.sources.set(i, text)
+                return
+            }
+            i = i + 1
+        }
+        this.uris.push(uri)
+        this.sources.push(text)
+    }
+
+    get(uri: String): String {
+        var i = 0
+        while (i < this.uris.len()) {
+            var u: String = this.uris.get(i)
+            if (u == uri) {
+                return this.sources.get(i)
+            }
+            i = i + 1
+        }
+        return ""
+    }
+
+    has(uri: String): Bool {
+        var i = 0
+        while (i < this.uris.len()) {
+            var u: String = this.uris.get(i)
+            if (u == uri) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+}
+
+extractFullText(params: JSONValue): String {
+    var textObj = jsonGetField(params, "textDocument")
+    if (textObj == null) {
+        return ""
+    }
+    return jsonGetString(textObj!, "text")
+}
+
+extractUri(params: JSONValue): String {
+    var textObj = jsonGetField(params, "textDocument")
+    if (textObj == null) {
+        return ""
+    }
+    return jsonGetString(textObj!, "uri")
+}
+
+extractChangeText(params: JSONValue): String {
+    var changes = jsonGetField(params, "contentChanges")
+    if (changes == null) {
+        return ""
+    }
+    if (changes!.kind != JSON_ARRAY) {
+        return ""
+    }
+    if (changes!.arr_elems.len() == 0) {
+        return ""
+    }
+    var first: JSONValue = changes!.arr_elems.get(0)
+    return jsonGetString(first, "text")
+}
+
+lineStartOffsets(text: String): List {
+    var offsets: List = List()
+    offsets.push(0)
+    var i = 0
+    while (i < text.length()) {
+        var c = nx_string_char_at(text, i)
+        if (c == '\n') {
+            offsets.push(i + 1)
+        }
+        i = i + 1
+    }
+    return offsets
+}
+
+offsetAtPosition(text: String, line: Int, character: Int): Int {
+    var starts = lineStartOffsets(text)
+    if (line < 0 || line >= starts.len()) {
+        return 0
+    }
+    var base: Int = starts.get(line)
+    return base + character
+}
+
+positionAtOffset(text: String, offset: Int): JSONValue {
+    var starts = lineStartOffsets(text)
+    var line = 0
+    var i = starts.len() - 1
+    while (i >= 0) {
+        var start: Int = starts.get(i)
+        if (offset >= start) {
+            line = i
+            break
+        }
+        i = i - 1
+    }
+    var lineStart: Int = starts.get(line)
+    var character = offset - lineStart
+    return makePosition(line, character)
+}
