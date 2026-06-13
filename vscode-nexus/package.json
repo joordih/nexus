@@ -2,7 +2,7 @@
   "name": "vscode-nexus",
   "displayName": "Nexus Language",
   "description": "Syntax highlighting and error diagnostics for the Nexus language",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "publisher": "nexus-lang",
   "engines": {
     "vscode": "^1.80.0"

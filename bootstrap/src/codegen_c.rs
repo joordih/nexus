@@ -444,7 +444,20 @@ impl CGen {
                 self.gen_method_call(receiver, method, args, false)
             }
             Expr::SafeCall { receiver, method, args } => {
-                self.gen_method_call(receiver, method, args, true)
+                let recv_ty = self.infer_expr_type(receiver);
+                let cty = self.nx_type_to_c(&recv_ty);
+                let recv_val = self.gen_expr(receiver, None);
+                let tmp = self.fresh_tmp();
+                self.emit_line(&format!("{} {} = {};", cty, tmp, recv_val));
+                let inner = self.gen_method_call_with_recv(method, args, &tmp, &recv_ty);
+                let method_ty = self.infer_method_type(receiver, method);
+                let null_val = match method_ty {
+                    NxType::Int | NxType::Long => "((NxInt)0LL)",
+                    NxType::Bool => "NX_FALSE",
+                    NxType::Char => "((NxChar)0)",
+                    _ => "NULL",
+                };
+                format!("({} != NULL ? ({}) : {})", tmp, inner, null_val)
             }
             Expr::FieldAccess { receiver, field } => {
                 // String.length as field (no parens)
@@ -668,8 +681,16 @@ impl CGen {
 
         let recv_type = self.infer_expr_type(receiver);
         let recv = self.gen_expr(receiver, Some(&recv_type));
+        self.gen_method_call_with_recv(method, args, &recv, &recv_type)
+    }
 
-        if matches!(recv_type, NxType::StringType) {
+    fn gen_method_call_with_recv(&mut self, method: &str, args: &[CallArg], recv: &str, recv_type: &NxType) -> String {
+        let effective = match recv_type {
+            NxType::Nullable(inner) => inner.as_ref(),
+            other => other,
+        };
+
+        if matches!(effective, NxType::StringType) {
             return match method {
                 "length" => format!("nx_string_len({})", recv),
                 "charAt" => {
@@ -702,12 +723,12 @@ impl CGen {
                     let sub = self.get_call_arg_str(args, 0);
                     format!("nx_string_contains({}, {})", recv, sub)
                 }
-                "toString" => recv,
+                "toString" => recv.to_string(),
                 _ => format!("nx_string_{}({})", method, recv),
             };
         }
 
-        if let NxType::List(elem_ty) = &recv_type.clone() {
+        if let NxType::List(elem_ty) = effective {
             let elem_ty = elem_ty.clone();
             return match method {
                 "len" | "size" => format!("nx_list_len({})", recv),
@@ -733,7 +754,7 @@ impl CGen {
             };
         }
 
-        if let NxType::Map(key_ty, val_ty) = &recv_type.clone() {
+        if let NxType::Map(key_ty, val_ty) = effective {
             let val_ty = val_ty.clone();
             let _ = key_ty;
             return match method {
@@ -761,33 +782,29 @@ impl CGen {
             };
         }
 
-        if matches!(recv_type, NxType::Int | NxType::Long) {
+        if matches!(effective, NxType::Int | NxType::Long) {
             if method == "toString" {
                 return format!("nx_int_to_string({})", recv);
             }
         }
 
-        if matches!(recv_type, NxType::Bool) {
+        if matches!(effective, NxType::Bool) {
             if method == "toString" {
                 return format!("nx_bool_to_string({})", recv);
             }
         }
 
-        if matches!(recv_type, NxType::Char) {
+        if matches!(effective, NxType::Char) {
             if method == "toString" {
                 return format!("nx_char_to_string({})", recv);
             }
         }
 
-        let type_name = match &recv_type {
+        let type_name = match effective {
             NxType::Named(n) => n.clone(),
-            NxType::Nullable(inner) => match inner.as_ref() {
-                NxType::Named(n) => n.clone(),
-                _ => "void".to_string(),
-            },
             _ => "void".to_string(),
         };
-        let mut all_args = vec![recv.clone()];
+        let mut all_args = vec![recv.to_string()];
         for a in args {
             let s = match a {
                 CallArg::Positional(e) => self.gen_expr(e, None),
@@ -900,7 +917,11 @@ impl CGen {
 
     fn infer_method_type(&self, receiver: &Expr, method: &str) -> NxType {
         let recv_type = self.infer_expr_type(receiver);
-        match &recv_type {
+        let effective = match &recv_type {
+            NxType::Nullable(inner) => inner.as_ref(),
+            other => other,
+        };
+        match effective {
             NxType::StringType => match method {
                 "length" | "toInt" => NxType::Int,
                 "charAt" => NxType::Char,
@@ -939,16 +960,6 @@ impl CGen {
                 if let Some(methods) = self.ctx.methods.get(type_name.as_str()) {
                     if let Some(fi) = methods.get(method) {
                         return fi.return_type.clone();
-                    }
-                }
-                NxType::Unknown
-            }
-            NxType::Nullable(inner) => {
-                if let NxType::Named(type_name) = inner.as_ref() {
-                    if let Some(methods) = self.ctx.methods.get(type_name.as_str()) {
-                        if let Some(fi) = methods.get(method) {
-                            return NxType::Nullable(Box::new(fi.return_type.clone()));
-                        }
                     }
                 }
                 NxType::Unknown

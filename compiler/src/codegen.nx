@@ -663,7 +663,11 @@ class CGen(
             return innerTy
         }
         if (expr.kind == EXPR_ELVIS) {
-            return this.inferExprType(expr.left!)
+            var lt = this.inferExprType(expr.left!)
+            if (lt.kind == NXTYPE_NULLABLE && lt.elem != null) {
+                return lt.elem!
+            }
+            return lt
         }
         return nxTypeUnknown()
     }
@@ -738,7 +742,11 @@ class CGen(
             }
         }
         var recvTy = this.inferExprType(expr.receiver!)
-        if (recvTy.kind == NXTYPE_STRING) {
+        var effectiveTy = recvTy
+        if (recvTy.kind == NXTYPE_NULLABLE && recvTy.elem != null) {
+            effectiveTy = recvTy.elem!
+        }
+        if (effectiveTy.kind == NXTYPE_STRING) {
             if (expr.method_name == "length" || expr.method_name == "toInt") {
                 return makeNxTypeSimple(NXTYPE_INT)
             }
@@ -751,19 +759,19 @@ class CGen(
             }
             return makeNxTypeSimple(NXTYPE_STRING)
         }
-        if (recvTy.kind == NXTYPE_LIST) {
+        if (effectiveTy.kind == NXTYPE_LIST) {
             if (expr.method_name == "len" || expr.method_name == "size") {
                 return makeNxTypeSimple(NXTYPE_INT)
             }
-            if (expr.method_name == "get" && recvTy.elem != null) {
-                return recvTy.elem!
+            if (expr.method_name == "get" && effectiveTy.elem != null) {
+                return effectiveTy.elem!
             }
             if (expr.method_name == "isEmpty") {
                 return makeNxTypeSimple(NXTYPE_BOOL)
             }
             return nxTypeUnknown()
         }
-        if (recvTy.kind == NXTYPE_MAP) {
+        if (effectiveTy.kind == NXTYPE_MAP) {
             if (expr.method_name == "len" || expr.method_name == "size") {
                 return makeNxTypeSimple(NXTYPE_INT)
             }
@@ -771,18 +779,18 @@ class CGen(
                 return makeNxTypeSimple(NXTYPE_BOOL)
             }
             if (expr.method_name == "get" || expr.method_name == "getInt") {
-                if (recvTy.val != null) {
-                    return recvTy.val!
+                if (effectiveTy.val != null) {
+                    return effectiveTy.val!
                 }
             }
             return nxTypeUnknown()
         }
-        if (recvTy.kind == NXTYPE_INT || recvTy.kind == NXTYPE_LONG ||
-            recvTy.kind == NXTYPE_BOOL || recvTy.kind == NXTYPE_CHAR) {
+        if (effectiveTy.kind == NXTYPE_INT || effectiveTy.kind == NXTYPE_LONG ||
+            effectiveTy.kind == NXTYPE_BOOL || effectiveTy.kind == NXTYPE_CHAR) {
             return makeNxTypeSimple(NXTYPE_STRING)
         }
-        if (recvTy.kind == NXTYPE_NAMED) {
-            var fi = this.ctx.findMethod(recvTy.name, expr.method_name)
+        if (effectiveTy.kind == NXTYPE_NAMED) {
+            var fi = this.ctx.findMethod(effectiveTy.name, expr.method_name)
             if (fi != null) {
                 if (fi!.return_type != null) {
                     return fi!.return_type!
@@ -893,16 +901,40 @@ class CGen(
             return raw
         }
         if (expr.kind == EXPR_METHOD) {
+            if (expr.is_safe) {
+                var recvTmp = this.freshTmp()
+                var recvTy2 = this.inferExprType(expr.receiver!)
+                var cty2 = this.nxTypeToCType(recvTy2)
+                var recvVal = this.genExpr(expr.receiver!, null)
+                this.emitLine(cty2 + " " + recvTmp + " = " + recvVal + ";")
+                var innerResult = this.genMethodCallExprWithRecv(expr, recvTmp, recvTy2, hint)
+                var methodTy = this.inferMethodType(expr)
+                var nullVal = "NULL"
+                if (methodTy.kind == NXTYPE_INT || methodTy.kind == NXTYPE_LONG) {
+                    nullVal = "((NxInt)0LL)"
+                }
+                if (methodTy.kind == NXTYPE_BOOL) {
+                    nullVal = "NX_FALSE"
+                }
+                if (methodTy.kind == NXTYPE_CHAR) {
+                    nullVal = "((NxChar)0)"
+                }
+                return "(" + recvTmp + " != NULL ? (" + innerResult + ") : " + nullVal + ")"
+            }
             return this.genMethodCallExpr(expr, false, hint)
         }
         if (expr.kind == EXPR_FIELD) {
-            var recvTy = this.inferExprType(expr.receiver!)
-            if (recvTy.kind == NXTYPE_STRING && expr.field_name == "length") {
-                var recv = this.genExpr(expr.receiver!, null)
-                return "nx_string_len(" + recv + ")"
+            var recvTy3 = this.inferExprType(expr.receiver!)
+            if (recvTy3.kind == NXTYPE_STRING && expr.field_name == "length") {
+                var recv3 = this.genExpr(expr.receiver!, null)
+                return "nx_string_len(" + recv3 + ")"
             }
-            var recv2 = this.genExpr(expr.receiver!, null)
-            return recv2 + "->" + expr.field_name
+            var recv4 = this.genExpr(expr.receiver!, null)
+            var access = recv4 + "->" + expr.field_name
+            if (expr.is_safe) {
+                return "(" + recv4 + " != NULL ? " + access + " : NULL)"
+            }
+            return access
         }
         if (expr.kind == EXPR_INDEX) {
             var base = this.genExpr(expr.left!, null)
@@ -1255,38 +1287,41 @@ class CGen(
         }
         var recvTy = this.inferExprType(expr.receiver!)
         var recv = this.genExpr(expr.receiver!, null)
-        if (recvTy.kind == NXTYPE_STRING) {
+        return this.genMethodCallExprWithRecv(expr, recv, recvTy, hint)
+    }
+
+    genMethodCallExprWithRecv(expr: Expr, recv: String, recvTy: NxType, hint: NxType?): String {
+        var effectiveTy = recvTy
+        if (recvTy.kind == NXTYPE_NULLABLE && recvTy.elem != null) {
+            effectiveTy = recvTy.elem!
+        }
+        if (effectiveTy.kind == NXTYPE_STRING) {
             return this.genStringMethod(recv, expr.method_name, expr.args)
         }
-        if (recvTy.kind == NXTYPE_LIST) {
-            return this.genListMethod(recv, recvTy, expr.method_name, expr.args, hint)
+        if (effectiveTy.kind == NXTYPE_LIST) {
+            return this.genListMethod(recv, effectiveTy, expr.method_name, expr.args, hint)
         }
-        if (recvTy.kind == NXTYPE_MAP) {
-            return this.genMapMethod(recv, recvTy, expr.method_name, expr.args)
+        if (effectiveTy.kind == NXTYPE_MAP) {
+            return this.genMapMethod(recv, effectiveTy, expr.method_name, expr.args)
         }
-        if (recvTy.kind == NXTYPE_INT || recvTy.kind == NXTYPE_LONG) {
+        if (effectiveTy.kind == NXTYPE_INT || effectiveTy.kind == NXTYPE_LONG) {
             if (expr.method_name == "toString") {
                 return "nx_int_to_string(" + recv + ")"
             }
         }
-        if (recvTy.kind == NXTYPE_BOOL) {
+        if (effectiveTy.kind == NXTYPE_BOOL) {
             if (expr.method_name == "toString") {
                 return "nx_bool_to_string(" + recv + ")"
             }
         }
-        if (recvTy.kind == NXTYPE_CHAR) {
+        if (effectiveTy.kind == NXTYPE_CHAR) {
             if (expr.method_name == "toString") {
                 return "nx_char_to_string(" + recv + ")"
             }
         }
         var typeName = ""
-        if (recvTy.kind == NXTYPE_NAMED) {
-            typeName = recvTy.name
-        }
-        if (recvTy.kind == NXTYPE_NULLABLE && recvTy.elem != null) {
-            if (recvTy.elem!.kind == NXTYPE_NAMED) {
-                typeName = recvTy.elem!.name
-            }
+        if (effectiveTy.kind == NXTYPE_NAMED) {
+            typeName = effectiveTy.name
         }
         if (typeName != "") {
             var allArgs = recv

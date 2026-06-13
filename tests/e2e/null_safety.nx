@@ -1,0 +1,19 @@
+import std.io
+
+data User {
+    email: String?
+}
+
+main(): Void {
+    var withEmail = User(email: "hello@example.com")
+    var noEmail = User(email: null)
+
+    io.println(withEmail.email ?: "fallback")
+    io.println(noEmail.email ?: "fallback")
+
+    io.println(withEmail.email?.length())
+    io.println(noEmail.email?.length() ?: -1)
+
+    io.println(withEmail.email?.length() ?: 0)
+    io.println(noEmail.email?.length() ?: 0)
+}

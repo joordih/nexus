@@ -801,7 +801,12 @@ class Parser(tokens: List, pos: Int, errors: List) {
             var elCl = this.spanCol()
             this.advance()
             var right: Expr = this.parseOr()
-            return makeExprBinary(op: OP_OR, l: left, r: right, line: elLn, col: elCl)
+            var e = Expr(kind: EXPR_ELVIS, int_val: 0, float_val: "", str_val: "",
+                char_val: "", bool_val: false, op: 0, left: left, right: right,
+                callee: null, receiver: null, method_name: "", field_name: "",
+                args: List(), path_parts: List(), elems: List(),
+                lambda_params: List(), is_safe: false, line: elLn, col: elCl)
+            return e
         }
         return left
     }
