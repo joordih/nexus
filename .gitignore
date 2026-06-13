@@ -1,4 +1,4 @@
-# build/
+build/
 bootstrap/target/
 *.out
 tests/**/*.c
@@ -14,3 +14,5 @@ package-lock.json
 .old/
 .vscode/**
 .claude/
+.idea/
+*.txt
