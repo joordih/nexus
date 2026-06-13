@@ -1,8 +1,16 @@
 .PHONY: all bootstrap stage1 stage2 stage3 verify-bootstrap test clean example
 .PHONY: test-lexer test-parser test-sema test-codegen test-e2e test-json test-std test-runtime test-lsp
-.PHONY: nexus-lsp stdlib vscode-nexus build-all example-stdlib check-examples
+.PHONY: nexus-lsp stdlib vscode-nexus build-all example-stdlib check-examples install uninstall
 
-NXC = build/nxc-stage0.exe
+ifeq ($(OS),Windows_NT)
+    EXE_EXT         := .exe
+    NXC_INSTALL_DIR ?= $(USERPROFILE)/bin
+else
+    EXE_EXT         :=
+    NXC_INSTALL_DIR ?= /usr/local/bin
+endif
+
+NXC = build/nxc-stage0$(EXE_EXT)
 CC ?= clang
 GC_INCLUDE ?=
 GC_LIB ?=
@@ -13,12 +21,11 @@ all: bootstrap
 
 bootstrap:
 	cd bootstrap && cargo build --release
-	-if not exist build mkdir build
-	copy /Y bootstrap\target\release\nxc-stage0.exe build\nxc-stage0.exe
+	python -c "import os; os.makedirs('build', exist_ok=True)"
+	python -c "import shutil; shutil.copy('bootstrap/target/release/nxc-stage0$(EXE_EXT)', 'build/nxc-stage0$(EXE_EXT)')"
 
 stage1: bootstrap
 	@echo "Construyendo stage1..."
-	-if not exist build mkdir build
 	$(NXC) compile-dir compiler/src build/nxc-stage1
 
 stage2: stage1
@@ -27,7 +34,7 @@ stage2: stage1
 
 stage3: stage2
 	@echo "Construyendo stage3..."
-	build/nxc-stage2 compile-dir compiler/src build/nxc-stage3
+	build/nxc-stage2$(EXE_EXT) compile-dir compiler/src build/nxc-stage3
 
 test-stage1: stage1
 	build/nxc-stage1 test-lexer tests/lexer
@@ -44,9 +51,9 @@ test: bootstrap test-runtime test-lexer test-parser test-sema test-codegen test-
 	@echo "Todas las suites de pruebas pasaron."
 
 test-runtime:
-	-if not exist build mkdir build
+	python -c "import os; os.makedirs('build', exist_ok=True)"
 	"$(CC)" -I runtime $(if $(GC_INCLUDE),-I $(GC_INCLUDE)) -o build/test_runtime runtime/nexus_runtime.c runtime/test_runtime.c $(if $(GC_LIB),-L $(GC_LIB)) -lgc -Wno-deprecated-declarations
-	./build/test_runtime
+	build/test_runtime
 
 test-lexer: bootstrap
 	$(NXC) test-lexer tests/lexer
@@ -67,16 +74,16 @@ test-json: stage1
 	build/nxc-stage1 test-json tests/json
 
 test-std: stage2
-	build/nxc-stage2 test-std tests/std
+	build/nxc-stage2$(EXE_EXT) test-std tests/std
 
 stdlib: test-std
 
 nexus-lsp: stage2
-	build/nxc-stage2 compile-lsp build/nexus-lsp
+	build/nxc-stage2$(EXE_EXT) compile-lsp build/nexus-lsp
 
 vscode-nexus: nexus-lsp
-	-if not exist vscode-nexus\bin mkdir vscode-nexus\bin
-	copy /Y build\nexus-lsp.exe vscode-nexus\bin\nexus-lsp.exe
+	python -c "import os; os.makedirs('vscode-nexus/bin', exist_ok=True)"
+	python -c "import shutil; shutil.copy('build/nexus-lsp$(EXE_EXT)', 'vscode-nexus/bin/nexus-lsp$(EXE_EXT)')"
 	cd vscode-nexus && npm run package
 
 build-all: verify-bootstrap vscode-nexus test
@@ -88,17 +95,23 @@ test-lsp: nexus-lsp
 
 example: bootstrap
 	$(NXC) compile examples/$(NAME).nx build/$(NAME)
-	build/$(NAME)
+	build/$(NAME)$(EXE_EXT)
 
 example-stdlib: stage2
-	build/nxc-stage2 compile examples/stdlib_showcase.nx build/stdlib_showcase
-	build/stdlib_showcase
+	build/nxc-stage2$(EXE_EXT) compile examples/stdlib_showcase.nx build/stdlib_showcase
+	build/stdlib_showcase$(EXE_EXT)
 
 check-examples: stage2
-	-if not exist examples\build mkdir examples\build
-	build/nxc-stage2 compile examples/hello.nx examples/build/hello
-	build/nxc-stage2 compile examples/stdlib_showcase.nx examples/build/stdlib_showcase
+	python -c "import os; os.makedirs('examples/build', exist_ok=True)"
+	build/nxc-stage2$(EXE_EXT) compile examples/hello.nx examples/build/hello
+	build/nxc-stage2$(EXE_EXT) compile examples/stdlib_showcase.nx examples/build/stdlib_showcase
+
+install: stage2
+	python -c "import shutil,os; d=r'$(NXC_INSTALL_DIR)'; dst=os.path.join(d,'nxc$(EXE_EXT)'); os.makedirs(d,exist_ok=True); shutil.copy2('build/nxc-stage2$(EXE_EXT)',dst); print('Instalado:',dst)"
+
+uninstall:
+	python -c "import os; p=os.path.join(r'$(NXC_INSTALL_DIR)','nxc$(EXE_EXT)'); os.remove(p); print('Desinstalado:',p)"
 
 clean:
 	cd bootstrap && cargo clean
-	rm -rf build
+	python -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
