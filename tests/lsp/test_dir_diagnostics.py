@@ -62,11 +62,11 @@ def check_file(lsp, rel_path):
         print(f"FAIL {rel_path}: no publishDiagnostics")
         return False
     messages = [d.get("message", "") for d in diag.get("params", {}).get("diagnostics", [])]
-    unresolved = [m for m in messages if m.startswith("nombre no resuelto:")]
+    unresolved = [m for m in messages if m.startswith("nombre no resuelto:") or m.startswith("función no resuelta:")]
     if unresolved:
         print(f"FAIL {rel_path}: {len(unresolved)} unresolved names, e.g. {unresolved[0]}")
         return False
-    print(f"PASS {rel_path}: no unresolved-name diagnostics")
+    print(f"PASS {rel_path}: no unresolved-name/unresolved-function diagnostics")
     return True
 
 def main():
@@ -102,9 +102,13 @@ def main():
         "nx/std/json/access.nx",
         "nx/lsp/documents.nx",
         "nx/lsp/server.nx",
+        "nx/lsp/protocol.nx",
+        "nx/lsp/program_build.nx",
         "nx/lsp/features/definition.nx",
         "nx/lsp/features/hover.nx",
         "nx/lsp/features/symbols.nx",
+        "nx/lsp/features/completion.nx",
+        "nx/lsp/features/diagnostics.nx",
     ):
         if not check_file(proc, rel):
             ok = False

@@ -188,8 +188,44 @@ analyzeSingleSource(source: String): SemaCtx {
     return ctx
 }
 
+isWorkspaceProgramPath(path: String): Bool {
+    if (nx_string_contains(path, "compiler/src")) {
+        return true
+    }
+    if (nx_string_contains(path, "nx/lsp")) {
+        return true
+    }
+    if (nx_string_contains(path, "nx/std/json")) {
+        return true
+    }
+    return false
+}
+
+buildWorkspaceProgram(focusFile: String, focusSource: String): Program {
+    var allItems: List = List()
+    var allErrors: List = List()
+    appendDirItems(allItems, allErrors, "compiler/src", focusFile, focusSource)
+    appendDirItems(allItems, allErrors, "nx/std/json", focusFile, focusSource)
+    appendDirItems(allItems, allErrors, "nx/lsp", focusFile, focusSource)
+    appendDirItems(allItems, allErrors, "nx/lsp/features", focusFile, focusSource)
+    return Program(items: allItems, parse_errors: allErrors)
+}
+
+analyzeWorkspaceFocus(fileName: String, source: String): SemaCtx {
+    var merged = buildWorkspaceProgram(fileName, source)
+    var ctx = checkProgramCollect(merged)
+    var focusTokens = tokenizeSource(source)
+    var focus = parseSource(focusTokens)
+    checkProgramItems(ctx, focus)
+    appendParseErrors(ctx, focus)
+    return ctx
+}
+
 analyzeSource(uri: String, source: String): SemaCtx {
     var path = uriToPath(uri)
+    if (isWorkspaceProgramPath(path)) {
+        return analyzeWorkspaceFocus(baseName(path), source)
+    }
     var dir = parentDir(path)
     if (dir == "") {
         return analyzeSingleSource(source)
