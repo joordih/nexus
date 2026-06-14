@@ -589,12 +589,26 @@ sortStringList(lst: List): List {
     return sorted
 }
 
+abortOnSemaErrors(ctx: SemaCtx, sourceName: String): Void {
+    if (ctx.errors.len() == 0) {
+        return
+    }
+    var i = 0
+    while (i < ctx.errors.len()) {
+        var e: SemaError = ctx.errors.get(i)
+        io.println(sourceName + ":" + e.line.toString() + ":" + e.col.toString() + ": error: " + e.msg)
+        i = i + 1
+    }
+    nx_exit(1)
+}
+
 compileFile(inputPath: String, outputPath: String): Void {
     var src: String = io.readFile(inputPath)
     var tokens: List = tokenizeSource(src)
     var parsed: Program = parseSource(tokens)
     var prog: Program = expandProgramImports(parsed)
     var ctx: SemaCtx = checkProgram(prog)
+    abortOnSemaErrors(ctx, inputPath)
     var cCode: String = generateC(prog, ctx)
     var cPath: String = outputPath + ".c"
     io.writeFile(cPath, cCode)
@@ -604,6 +618,7 @@ compileFile(inputPath: String, outputPath: String): Void {
 compileDirPath(dirPath: String, outputPath: String): Void {
     var prog: Program = parseDirNx(dirPath)
     var ctx: SemaCtx = checkProgram(prog)
+    abortOnSemaErrors(ctx, dirPath)
     var cCode: String = generateC(prog, ctx)
     var cPath: String = outputPath + ".c"
     io.writeFile(cPath, cCode)

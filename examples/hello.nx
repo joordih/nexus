@@ -1,5 +1,7 @@
 import std.io
 import std.json
+import std.fs.path
+import std.network.http_client
 
 main(): Void {
     io.println("Hola, Nexus!")

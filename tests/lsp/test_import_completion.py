@@ -125,11 +125,27 @@ def main():
         proc.kill()
         return 1
 
+    source3 = "import std.network.http_client\n\nmain(): Void {\n    var r = http_client.\n}\n"
+    member_line = 3
+    member_character = len("    var r = http_client.")
+    result3 = request_completion(proc, uri, source3, member_line, member_character)
+    if result3 is None:
+        print("FAIL: no completion result after http_client.")
+        proc.kill()
+        return 1
+    labels3 = {item.get("label") for item in result3.get("items", [])}
+    for expected3 in ("buildHttpGetRequest", "parseHttpStatusLine"):
+        if expected3 not in labels3:
+            print(f"FAIL: missing http_client member {expected3}, got {sorted(labels3)}")
+            proc.kill()
+            return 1
+
     send_message(proc, {"jsonrpc": "2.0", "id": 2, "method": "shutdown", "params": {}})
     read_message(proc)
     send_message(proc, {"jsonrpc": "2.0", "method": "exit", "params": {}})
     proc.wait(timeout=5)
     print("PASS import completion: std.io, std.json, compiler.ast, lsp.server")
+    print("PASS member completion: http_client.buildHttpGetRequest, http_client.parseHttpStatusLine")
     return 0
 
 if __name__ == "__main__":

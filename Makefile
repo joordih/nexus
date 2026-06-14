@@ -1,13 +1,15 @@
 .PHONY: all bootstrap stage1 stage2 stage3 verify-bootstrap test clean example
 .PHONY: test-lexer test-parser test-sema test-codegen test-e2e test-json test-std test-runtime test-lsp
-.PHONY: nexus-lsp stdlib vscode-nexus build-all example-stdlib check-examples install uninstall
+.PHONY: nexus-lsp stdlib vscode-nexus intellij-nexus build-all example-stdlib check-examples install uninstall
 
 ifeq ($(OS),Windows_NT)
     EXE_EXT         := .exe
     NXC_INSTALL_DIR ?= $(USERPROFILE)/bin
+    GRADLEW         := gradlew.bat
 else
     EXE_EXT         :=
     NXC_INSTALL_DIR ?= /usr/local/bin
+    GRADLEW         := ./gradlew
 endif
 
 NXC = build/nxc-stage0$(EXE_EXT)
@@ -85,6 +87,9 @@ vscode-nexus: nexus-lsp
 	python -c "import os; os.makedirs('vscode-nexus/bin', exist_ok=True)"
 	python -c "import shutil; shutil.copy('build/nexus-lsp$(EXE_EXT)', 'vscode-nexus/bin/nexus-lsp$(EXE_EXT)')"
 	cd vscode-nexus && npm run package
+
+intellij-nexus:
+	cd editors/intellij && $(GRADLEW) buildPlugin verifyPlugin
 
 build-all: verify-bootstrap vscode-nexus test
 

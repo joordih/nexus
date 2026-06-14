@@ -15,4 +15,11 @@ package-lock.json
 .vscode/**
 .claude/
 .idea/
-*.txt
+
+editors/
+
+editors/intellij/.gradle/
+editors/intellij/build/
+editors/intellij/src/main/gen/
+editors/intellij/.intellijPlatform/
+editors/intellij/.run/

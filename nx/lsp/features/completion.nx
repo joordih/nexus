@@ -239,6 +239,20 @@ methodCompletionsForType(ctx: SemaCtx, typeName: String): List {
     return items
 }
 
+moduleFnCompletions(ctx: SemaCtx, modName: String): List {
+    var items: List = List()
+    var i = 0
+    while (i < ctx.fn_names.len()) {
+        var m: String = ctx.fn_modules.get(i)
+        if (m == modName) {
+            var name: String = ctx.fn_names.get(i)
+            appendFn(items, name, modName + "." + name)
+        }
+        i = i + 1
+    }
+    return items
+}
+
 textBeforeCursor(source: String, line: Int, character: Int): String {
     var starts = lineStartOffsets(source)
     if (line < 0 || line >= starts.len()) {
@@ -356,6 +370,13 @@ buildCompletionList(ctx: SemaCtx, source: String, line: Int, character: Int): JS
                 while (mi < methods.len()) {
                     items.push(methods.get(mi))
                     mi = mi + 1
+                }
+            } else if (ctx.hasImport(recv)) {
+                var modFns = moduleFnCompletions(ctx, recv)
+                var fi = 0
+                while (fi < modFns.len()) {
+                    items.push(modFns.get(fi))
+                    fi = fi + 1
                 }
             }
         }

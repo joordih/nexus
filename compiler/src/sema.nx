@@ -128,6 +128,7 @@ class SemaCtx(
     struct_infos: List,
     fn_names: List,
     fn_infos: List,
+    fn_modules: List,
     method_class_names: List,
     method_fn_names: List,
     method_fn_infos: List,
@@ -178,11 +179,16 @@ class SemaCtx(
     }
 
     addFn(fi: FnInfo): Void {
+        this.addFnInModule(fi, "")
+    }
+
+    addFnInModule(fi: FnInfo, moduleName: String): Void {
         if (this.findFn(fi.name) != null) {
             return
         }
         this.fn_names.push(fi.name)
         this.fn_infos.push(fi)
+        this.fn_modules.push(moduleName)
     }
 
     findMethod(className: String, methodName: String): FnInfo? {
@@ -343,7 +349,7 @@ class SemaCtx(
 makeSemaCtx(): SemaCtx {
     return SemaCtx(
         struct_names: List(), struct_infos: List(),
-        fn_names: List(), fn_infos: List(),
+        fn_names: List(), fn_infos: List(), fn_modules: List(),
         method_class_names: List(), method_fn_names: List(), method_fn_infos: List(),
         global_names: List(), global_types: List(),
         import_names: List(), collected_imports: List(), errors: List()
@@ -390,11 +396,15 @@ parseModuleFile(filePath: String): Program {
     return parseSource(tokens)
 }
 
-collectModuleItems(ctx: SemaCtx, prog: Program): Void {
+collectModuleItems(ctx: SemaCtx, prog: Program, moduleName: String): Void {
     var i = 0
     while (i < prog.items.len()) {
         var item: Item = prog.items.get(i)
-        collectItem(ctx, item)
+        if (item.kind == ITEM_FUNCTION) {
+            ctx.addFnInModule(buildFnInfo(ctx, item.function_decl!), moduleName)
+        } else {
+            collectItem(ctx, item)
+        }
         i = i + 1
     }
 }
@@ -409,7 +419,7 @@ collectImportModule(ctx: SemaCtx, importPath: String): Void {
         return
     }
     var prog = parseModuleFile(filePath)
-    collectModuleItems(ctx, prog)
+    collectModuleItems(ctx, prog, lastPathSegment(importPath))
 }
 
 itemImportPath(item: Item): String {
@@ -519,24 +529,38 @@ makeScope(parent: Scope?): Scope {
     return Scope(parent: parent, names: List(), types: List())
 }
 
+lastPathSegment(path: String): String {
+    var lastDot = -1
+    var j = 0
+    while (j < path.length()) {
+        if (path.charAt(j) == '.') {
+            lastDot = j
+        }
+        j = j + 1
+    }
+    if (lastDot >= 0) {
+        return path.substring(lastDot + 1, path.length())
+    }
+    return path
+}
+
+buildFnInfo(ctx: SemaCtx, fn: Function): FnInfo {
+    var ptypes: List = List()
+    var k = 0
+    while (k < fn.params.len()) {
+        var p: Param = fn.params.get(k)
+        var pt = ctx.resolveType(p.ty)
+        ptypes.push(pt)
+        k = k + 1
+    }
+    var ret = ctx.resolveType(fn.return_type)
+    return FnInfo(name: fn.name, param_types: ptypes, return_type: ret)
+}
+
 collectItem(ctx: SemaCtx, item: Item): Void {
     if (item.kind == ITEM_IMPORT) {
         var path = item.import_path
-        var lastDot = -1
-        var j = 0
-        while (j < path.length()) {
-            if (path.charAt(j) == '.') {
-                lastDot = j
-            }
-            j = j + 1
-        }
-        var lastName = ""
-        if (lastDot >= 0) {
-            lastName = path.substring(lastDot + 1, path.length())
-        } else {
-            lastName = path
-        }
-        ctx.addImport(lastName)
+        ctx.addImport(lastPathSegment(path))
         collectImportModule(ctx, path)
         return
     }
@@ -579,33 +603,14 @@ collectItem(ctx: SemaCtx, item: Item): Void {
         var i4 = 0
         while (i4 < cd.methods.len()) {
             var fn: Function = cd.methods.get(i4)
-            var ptypes: List = List()
-            var k = 0
-            while (k < fn.params.len()) {
-                var p: Param = fn.params.get(k)
-                var pt = ctx.resolveType(p.ty)
-                ptypes.push(pt)
-                k = k + 1
-            }
-            var ret = ctx.resolveType(fn.return_type)
-            var fi = FnInfo(name: fn.name, param_types: ptypes, return_type: ret)
+            var fi = buildFnInfo(ctx, fn)
             ctx.addMethod(cd.name, fi)
             i4 = i4 + 1
         }
         return
     }
     if (item.kind == ITEM_FUNCTION) {
-        var fn2: Function = item.function_decl!
-        var ptypes2: List = List()
-        var k2 = 0
-        while (k2 < fn2.params.len()) {
-            var p2: Param = fn2.params.get(k2)
-            var pt2 = ctx.resolveType(p2.ty)
-            ptypes2.push(pt2)
-            k2 = k2 + 1
-        }
-        var ret2 = ctx.resolveType(fn2.return_type)
-        var fi2 = FnInfo(name: fn2.name, param_types: ptypes2, return_type: ret2)
+        var fi2 = buildFnInfo(ctx, item.function_decl!)
         ctx.addFn(fi2)
         return
     }
@@ -826,15 +831,10 @@ inferExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
         if (g != null) {
             return g!
         }
-        if (name == "Map" || name == "List") {
+        if (isBuiltinTypeName(name)) {
             return nxTypeUnknown()
         }
         if (ctx.findFn(name) != null || ctx.findStruct(name) != null || ctx.hasImport(name)) {
-            return nxTypeUnknown()
-        }
-        if (name == "Int" || name == "Long" || name == "Float" || name == "Double" ||
-            name == "Bool" || name == "Char" || name == "String" || name == "Void" ||
-            name == "true" || name == "false" || name == "null") {
             return nxTypeUnknown()
         }
         ctx.addError("nombre no resuelto: " + name, expr.line, expr.col)
@@ -935,6 +935,13 @@ moduleFnReturnType(ctx: SemaCtx, modName: String, fnName: String): NxType {
     return nxTypeUnknown()
 }
 
+isBuiltinTypeName(name: String): Bool {
+    return name == "Int" || name == "Long" || name == "Float" || name == "Double" ||
+        name == "Bool" || name == "Char" || name == "String" || name == "Void" ||
+        name == "List" || name == "Map" ||
+        name == "true" || name == "false" || name == "null"
+}
+
 inferCallExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
     var callee: Expr = expr.callee!
     var i = 0
@@ -996,6 +1003,9 @@ inferCallExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
                 return fi!.return_type!
             }
             return nxTypeUnknown()
+        }
+        if (!name.startsWith("nx_") && !isBuiltinTypeName(name)) {
+            ctx.addError("función no resuelta: " + name, expr.line, expr.col)
         }
     }
     return nxTypeUnknown()

@@ -1,0 +1,38 @@
+name: IntelliJ Plugin
+
+on:
+  push:
+    paths:
+      - 'editors/intellij/**'
+      - '.github/workflows/intellij.yml'
+  pull_request:
+    paths:
+      - 'editors/intellij/**'
+      - '.github/workflows/intellij.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x editors/intellij/gradlew
+
+      - name: Build and verify plugin
+        working-directory: editors/intellij
+        run: ./gradlew build --no-daemon
+
+      - name: Upload plugin distribution
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-intellij-plugin
+          path: editors/intellij/build/distributions/*.zip
+          if-no-files-found: ignore
