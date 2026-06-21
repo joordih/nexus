@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgc-dev libssl-dev clang
+
+      - name: Rust toolchain
+        uses: moonrepo/setup-rust@v0
+        with:
+          channel: stable
+
+      - name: Tests
+        run: make test
+
+      - name: Bootstrap verify
+        run: make verify-bootstrap

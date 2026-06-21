@@ -18,6 +18,7 @@ tokenDisplay(tok: Token): String {
         return "Char('" + tok.text + "')"
     }
     if (k == TK_VAR) { return "var" }
+    if (k == TK_VAL) { return "val" }
     if (k == TK_FINAL) { return "final" }
     if (k == TK_CLASS) { return "class" }
     if (k == TK_DATA) { return "data" }
@@ -234,12 +235,12 @@ dumpCallArgs(args: List, depth: Int): String {
         var arg: CallArg = args.get(i)
         if (arg.kind == CALL_NAMED) {
             out = out + dumpIndent(depth) + "NamedArg(" + arg.label + ")\n"
-            if (arg.val != null) {
-                out = out + dumpExpr(arg.val!, depth + 1)
+            if (arg.expr != null) {
+                out = out + dumpExpr(arg.expr!, depth + 1)
             }
         } else {
-            if (arg.val != null) {
-                out = out + dumpExpr(arg.val!, depth)
+            if (arg.expr != null) {
+                out = out + dumpExpr(arg.expr!, depth)
             }
         }
         i = i + 1
@@ -362,11 +363,11 @@ dumpStmt(stmt: Stmt, depth: Int): String {
 }
 
 dumpBlock(stmts: List, depth: Int): String {
-    var out = dumpIndent(depth - 1) + "Block\n"
+    var out = dumpIndent(depth) + "Block\n"
     var i = 0
     while (i < stmts.len()) {
         var s: Stmt = stmts.get(i)
-        out = out + dumpStmt(s, depth)
+        out = out + dumpStmt(s, depth + 1)
         i = i + 1
     }
     return out
@@ -668,11 +669,8 @@ compileProgram(prog: Program, outputPath: String): Void {
     nx_compile_c(cPath, outputPath)
 }
 
-compileJsonTest(libDir: String, testPath: String, outputPath: String): Void {
-    var libProg: Program = parseDirNx(libDir)
-    var testProg: Program = parseFileNx(testPath)
-    var merged: Program = mergePrograms(libProg, testProg)
-    compileProgram(merged, outputPath)
+compileJsonTest(testPath: String, outputPath: String): Void {
+    compileFile(testPath, outputPath)
 }
 
 compileLspPath(outputPath: String): Void {
@@ -829,6 +827,10 @@ runLexerTestsImpl(testDir: String): Bool {
                 io.println("PASS lexer: " + nxPath)
             } else {
                 io.println("FAIL lexer: " + nxPath)
+                io.println("esperado:")
+                io.println(expected)
+                io.println("obtenido:")
+                io.println(got)
                 allPass = false
             }
         }
@@ -853,6 +855,10 @@ runParserTestsImpl(testDir: String): Bool {
                 io.println("PASS parser: " + nxPath2)
             } else {
                 io.println("FAIL parser: " + nxPath2)
+                io.println("esperado:")
+                io.println(expected2)
+                io.println("obtenido:")
+                io.println(got2)
                 allPass2 = false
             }
         }
@@ -888,7 +894,6 @@ runE2eTestsImpl(testDir: String): Bool {
 }
 
 runJsonTestsImpl(testDir: String): Bool {
-    var libDir: String = "nx/std/json"
     var listing5: List = nx_list_dir(testDir)
     var allPass5: Bool = true
     var i5: Int = 0
@@ -900,7 +905,7 @@ runJsonTestsImpl(testDir: String): Bool {
             var expPath5: String = testDir + "/" + base5 + ".expected"
             var expected5: String = io.readFile(expPath5)
             var binPath5: String = testDir + "/" + base5 + ".out"
-            compileJsonTest(libDir, nxPath5, binPath5)
+            compileJsonTest(nxPath5, binPath5)
             var got5: String = nx_run_binary_capture(binPath5)
             if (got5 == expected5) {
                 io.println("PASS json: " + nxPath5)

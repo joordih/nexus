@@ -1,4 +1,5 @@
 import std.io
+import std.json.value
 
 final CHAR_NULL: Int = 0
 final HEX_BASE: Int = 16
@@ -104,9 +105,9 @@ class JSONParser(source: String, pos: Int) {
 
     parse(): JSONValue {
         this.skipWhitespace()
-        var val = this.parseValue()
+        var parsed = this.parseValue()
         this.skipWhitespace()
-        return val
+        return parsed
     }
 
     parseValue(): JSONValue {
@@ -289,8 +290,8 @@ class JSONParser(source: String, pos: Int) {
             }
             this.advance()
             this.skipWhitespace()
-            var val = this.parseValue()
-            m.put(key, val)
+            var parsed = this.parseValue()
+            m.put(key, parsed)
             this.skipWhitespace()
             var c = this.peek()
             if (c == ',') {

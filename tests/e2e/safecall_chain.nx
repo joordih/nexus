@@ -1,0 +1,14 @@
+import std.io
+
+data Profile {
+    email: String?
+}
+
+data User {
+    profile: Profile?
+}
+
+main(): Void {
+    final u = User(profile: null)
+    io.println(u.profile?.email ?: "sin email")
+}

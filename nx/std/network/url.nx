@@ -1,0 +1,133 @@
+import std.core.strings
+import std.core.integer
+import std.core.string_builder
+
+final URL_ASCII_PRINTABLE: String = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+final URL_HEX_CHARS: String = "0123456789ABCDEF"
+
+isUrlQuerySafeChar(c: Char): Bool {
+    if (c >= 'a' && c <= 'z') {
+        return true
+    }
+    if (c >= 'A' && c <= 'Z') {
+        return true
+    }
+    if (c >= '0' && c <= '9') {
+        return true
+    }
+    if (c == '-') {
+        return true
+    }
+    if (c == '_') {
+        return true
+    }
+    if (c == '.') {
+        return true
+    }
+    if (c == '~') {
+        return true
+    }
+    return false
+}
+
+charAsciiCode(c: Char): Int {
+    var i = 0
+    while (i < URL_ASCII_PRINTABLE.length()) {
+        if (URL_ASCII_PRINTABLE.charAt(i) == c) {
+            return 32 + i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+byteToHexPair(code: Int): String {
+    var high = code / 16
+    var low = code - high * 16
+    return URL_HEX_CHARS.charAt(high).toString() + URL_HEX_CHARS.charAt(low).toString()
+}
+
+urlEncodeQueryValue(s: String): String {
+    var result = ""
+    var i = 0
+    while (i < s.length()) {
+        var c = s.charAt(i)
+        if (c == ' ') {
+            result = result + "+"
+        } else if (isUrlQuerySafeChar(c)) {
+            result = result + c.toString()
+        } else {
+            var code = charAsciiCode(c)
+            if (code >= 0) {
+                result = result + "%" + byteToHexPair(code)
+            }
+        }
+        i = i + 1
+    }
+    return result
+}
+
+class URLSearchParams(order: List, entries: Map) {
+
+    append(key: String, value: String): Void {
+        if (!this.entries.contains(key)) {
+            this.order.push(key)
+        }
+        this.entries.insert(key, value)
+    }
+
+    toString(): String {
+        var builder = StringBuilder(parts: List())
+        var i = 0
+        while (i < this.order.len()) {
+            if (i > 0) {
+                builder.append("&")
+            }
+            var key: String = this.order.get(i)
+            var value: String = this.entries.get(key)!
+            builder.append(urlEncodeQueryValue(key))
+            builder.append("=")
+            builder.append(urlEncodeQueryValue(value))
+            i = i + 1
+        }
+        return builder.toString()
+    }
+}
+
+data ParsedUrl {
+    secure: Bool
+    host: String
+    port: Int
+    path: String
+}
+
+parseUrl(url: String): ParsedUrl {
+    var secure = false
+    var rest = url
+    var schemeEnd = indexOfSubstring(url, "://", 0)
+    if (schemeEnd >= 0) {
+        var scheme = url.substring(0, schemeEnd)
+        if (scheme.equals("https")) {
+            secure = true
+        }
+        rest = url.substring(schemeEnd + 3, url.length())
+    }
+    var authority = rest
+    var path = "/"
+    var pathStart = indexOfSubstring(rest, "/", 0)
+    if (pathStart >= 0) {
+        authority = rest.substring(0, pathStart)
+        path = rest.substring(pathStart, rest.length())
+    }
+    var host = authority
+    var port = 80
+    if (secure) {
+        port = 443
+    }
+    var portStart = indexOfSubstring(authority, ":", 0)
+    if (portStart >= 0) {
+        host = authority.substring(0, portStart)
+        port = parseInt(authority.substring(portStart + 1, authority.length()))
+    }
+    return ParsedUrl(secure: secure, host: host, port: port, path: path)
+}

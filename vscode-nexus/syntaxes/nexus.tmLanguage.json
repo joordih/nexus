@@ -60,7 +60,7 @@
         },
         {
           "name": "keyword.declaration.nexus",
-          "match": "\\b(var|final|class|data|value|interface|annotation)\\b"
+          "match": "\\b(var|val|final|class|data|value|interface|annotation)\\b"
         },
         {
           "name": "keyword.other.nexus",

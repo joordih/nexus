@@ -1,10 +1,13 @@
 import std.io
+import std.json.value
+import std.json.parser
+import std.json.writer
 
 roundTrip(input: String, expected: String, name: String): Bool {
     var parser = JSONParser(source: input, pos: 0)
-    var val = parser.parse()
+    var parsed = parser.parse()
     var writer = JSONWriter()
-    var got = writer.write(val)
+    var got = writer.write(parsed)
     if (got == expected) {
         io.println("PASS json: " + name)
         return true

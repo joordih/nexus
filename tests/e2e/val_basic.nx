@@ -1,0 +1,6 @@
+import std.io
+
+main(): Void {
+    val x = 42
+    io.println(x)
+}

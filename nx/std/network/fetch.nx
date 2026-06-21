@@ -1,0 +1,51 @@
+import std.network.socket
+import std.network.url
+import std.network.http_client
+import std.json
+import std.json.value
+
+class HttpResponse(status: Int, ok: Bool, body: String) {
+
+    json(): JSONValue {
+        return json.parse(this.body)
+    }
+}
+
+openConnection(parsed: ParsedUrl): Socket? {
+    if (parsed.secure) {
+        return connectTlsSocket(parsed.host, parsed.port)
+    }
+    return connectSocket(parsed.host, parsed.port)
+}
+
+fetch(url: String): HttpResponse {
+    var parsed = parseUrl(url)
+    var sock = openConnection(parsed)
+    if (sock == null) {
+        throw
+    }
+    var request = buildHttpGetRequest(parsed.host, parsed.path)
+    sock!.writeText(request)
+    var statusLine = sock!.readLine()
+    var status = parseHttpStatusLine(statusLine)
+    var contentLength = -1
+    var useChunked = false
+    var headerLine = sock!.readLine()
+    while (headerLine.length() > 0) {
+        var parsedLength = parseHeaderContentLength(headerLine)
+        if (parsedLength >= 0) {
+            contentLength = parsedLength
+        }
+        if (parseHeaderTransferEncodingChunked(headerLine)) {
+            useChunked = true
+        }
+        headerLine = sock!.readLine()
+    }
+    var body = readHttpResponseBody(sock!, contentLength)
+    if (useChunked) {
+        body = decodeChunkedBody(body)
+    }
+    sock!.close()
+    var ok = status >= 200 && status < 300
+    return HttpResponse(status: status, ok: ok, body: body)
+}

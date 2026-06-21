@@ -66,6 +66,7 @@ final TK_QUESTION_COLON: Int = 70
 final TK_TRY: Int = 71
 final TK_CATCH: Int = 72
 final TK_THROW: Int = 73
+final TK_VAL: Int = 74
 final TK_ERROR: Int = 99
 
 data Token {
@@ -99,6 +100,7 @@ buildKeywords(): Map {
     var m: Map = Map()
     m.insert("var", TK_VAR)
     m.insert("final", TK_FINAL)
+    m.insert("val", TK_VAL)
     m.insert("class", TK_CLASS)
     m.insert("data", TK_DATA)
     m.insert("value", TK_VALUE)
@@ -263,27 +265,27 @@ class Lexer(source: String, pos: Int, line: Int, col: Int, keywords: Map) {
     scanChar(startLine: Int, startCol: Int): Token {
         this.advance()
         var c = this.advance()
-        var val = ""
+        var chText = ""
         if (c == '\\') {
             var esc = this.advance()
             if (esc == 'n') {
-                val = "\n"
+                chText = "\n"
             } else if (esc == 't') {
-                val = "\t"
+                chText = "\t"
             } else if (esc == 'r') {
-                val = "\r"
+                chText = "\r"
             } else if (esc == '0') {
-                val = "\0"
+                chText = "\0"
             } else {
-                val = esc.toString()
+                chText = esc.toString()
             }
         } else {
-            val = c.toString()
+            chText = c.toString()
         }
         if (this.peek() == '\'') {
             this.advance()
         }
-        return makeToken(TK_CHAR, val, startLine, startCol)
+        return makeToken(TK_CHAR, chText, startLine, startCol)
     }
 
     nextToken(): Token {

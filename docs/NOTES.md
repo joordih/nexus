@@ -29,7 +29,40 @@ Las fases 1–4 se implementaron primero en `bootstrap/` (Rust). El compilador d
 
 **Inferencia en codegen.** Tabla `var_types` rastrea tipos de variables locales para emitir C correcto. Llamadas calificadas `mod.fn()` delegan el tipo de retorno en `moduleFnReturnType` (compartido con sema); ver `docs/CODEGEN-QUALIFIED-CALL-FIX.md`.
 
+## Plan maestro (fases 0–2)
+
+**Fase 0.** CI en `.github/workflows/ci.yml` (`make test`, `make verify-bootstrap`). Tests en cuarentena en `tests/quarantine/` documentan
+bugs que las fases 1–2 cierran.
+
+**Fase 1.** Dispatch nullable sobre campos: `unwrapNullableTy` en sema/codegen para
+receptores `T?`; `?:` con ternario tipado (no `||`).
+
+**Fase 2.** Keyword `val` (`TK_VAL = 74`); `Scope.final_flags` rechaza reasignación de
+`val`/`final`.
+
+### Nexus Core (frontera stage0)
+
+Tokens: `TK_*` 0–74 (`TK_VAL` último keyword). Construcciones: `var`/`val`/`final`,
+`class`/`data`/`value`, `import`, `if`/`while`/`for`/`switch`/`try`, operadores
+`?.` `?:` `!`, tipos primitivos y `List`/`Map`.
+
+### Auditoría de primitivos
+
+| Tipo | Aritmética codegen | toString |
+|------|-------------------|----------|
+| Int/Long | Sí (`NxInt`) | `nx_int_to_string` |
+| Bool/Char | Parcial | `nx_bool_to_string`, `nx_char_to_string` |
+| String | Concat `+` | nativo |
+| Float/Double | **No** (emite `NxInt`) | **No** |
+| Void/Null | N/A | N/A |
+
+Gaps Float/Double: fase 3 del plan maestro.
+
 ## En curso y pendiente
+
+**TLS en runtime y std.network.** Se añadió TLS de cliente vía OpenSSL en el runtime (`nx_tls_*`) y en `std.network` (`connectTlsSocket`, `httpGetOverTls`). OpenSSL 3.x es dependencia de enlace (`SSL_INCLUDE`/`SSL_LIB`, igual que `GC_INCLUDE`/`GC_LIB`). Limitación conocida: la verificación de certificado del servidor está desactivada por defecto; solo se activa si se define `NX_TLS_CA_BUNDLE` apuntando a un bundle de CAs. Endurecer la verificación por defecto (trust store del SO) queda como follow-up.
+
+**API `fetch` en std.network.** Módulo `url.nx` (`URLSearchParams`, `parseUrl`/`ParsedUrl`), módulo `fetch.nx` (`HttpResponse` con `ok`/`status`/`json()`, función `fetch(url)`), apoyada en `connectTlsSocket` de 001. El ejemplo `zenserp_search` usa esta API. Limitaciones: `fetch` solo hace GET y asume `Content-Length` (sin `Transfer-Encoding: chunked`); la codificación de query solo cubre ASCII imprimible (caracteres no-ASCII se descartan), igual que el prototipo original.
 
 **LSP Parte II — stdlib** (`LSP-STDLIB-PLAN.md`). Tier A cerrado (`nx/std/core/`, `nx/std/collections/`). Tier B cerrado (`nx/std/fs/`, `system/`, `network/`, `datetime/`, `regex/` + primitivas runtime). Tier C parcial: `try`/`catch`/`throw` en compilador; `nx/std/reflection/type_info.nx` (registro manual); `nx/std/concurrency/thread.nx` (identidad sin OS threads). Pendiente Tier C: RTTI generado por codegen, threads OS (pthreads/Win32), `Executor`/`Future`.
 

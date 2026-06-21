@@ -1,19 +1,33 @@
-class Socket(fd: Int) {
+class Socket(fd: Int, secure: Bool) {
 
     readBytes(n: Int): String {
+        if (this.secure) {
+            return nx_tls_read(this.fd, n)
+        }
         return nx_tcp_read(this.fd, n)
     }
 
     readLine(): String {
+        if (this.secure) {
+            return nx_tls_read_line(this.fd)
+        }
         return nx_tcp_read_line(this.fd)
     }
 
     writeText(text: String): Void {
-        nx_tcp_write(this.fd, text, text.length())
+        if (this.secure) {
+            nx_tls_write(this.fd, text, text.length())
+        } else {
+            nx_tcp_write(this.fd, text, text.length())
+        }
     }
 
     close(): Void {
-        nx_tcp_close(this.fd)
+        if (this.secure) {
+            nx_tls_close(this.fd)
+        } else {
+            nx_tcp_close(this.fd)
+        }
     }
 }
 
@@ -22,5 +36,13 @@ connectSocket(host: String, port: Int): Socket? {
     if (fd < 0) {
         return null
     }
-    return Socket(fd: fd)
+    return Socket(fd: fd, secure: false)
+}
+
+connectTlsSocket(host: String, port: Int): Socket? {
+    var handle = nx_tls_connect(host, port)
+    if (handle < 0) {
+        return null
+    }
+    return Socket(fd: handle, secure: true)
 }

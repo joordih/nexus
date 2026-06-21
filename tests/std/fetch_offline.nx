@@ -1,0 +1,11 @@
+import std.io
+import std.network.fetch
+
+main(): Void {
+    try {
+        var response = fetch("https://nexus-fetch-test.invalid/")
+        io.println("unexpected connection")
+    } catch (err) {
+        io.println("fetch threw on transport error")
+    }
+}

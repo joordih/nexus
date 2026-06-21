@@ -157,6 +157,7 @@ Requirements:
 * Rust (stable) — for the stage 0 compiler
 * `clang` — or any C compiler, via the `CC` variable
 * [Boehm GC](https://www.hboehm.info/gc/) (`libgc`)
+* OpenSSL (`libssl`/`libcrypto`)
 * `make`
 * Python — only for `make verify-bootstrap` and the LSP test suite
 * Node.js / `npm` — only for packaging the VS Code extension
@@ -168,7 +169,11 @@ Environment variables for linking:
 | `CC` | C compiler (default `clang`) |
 | `GC_INCLUDE` | Boehm GC include directory |
 | `GC_LIB` | Boehm GC library directory |
+| `SSL_INCLUDE` | OpenSSL include directory |
+| `SSL_LIB` | OpenSSL library directory |
 | `GC_STATIC` | `1` for static GC linkage (default on Windows) |
+
+Running `make bootstrap`, `make stage2`, or `make test` executes `scripts/write_link_config.py`, which auto-detects OpenSSL and Boehm GC (vcpkg on Windows, `pkg-config` or common paths elsewhere) and writes `runtime/nexus_link_config.h`. After that, `nxc compile` uses those baked paths when the variables above are unset, so HTTPS programs link without manual `SSL_*` exports. Override any path by setting the variable before `make` or before `nxc compile`.
 
 Main targets:
 

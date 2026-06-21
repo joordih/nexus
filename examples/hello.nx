@@ -5,6 +5,10 @@ import std.network.http_client
 
 main(): Void {
     io.println("Hola, Nexus!")
-    var v = json.parse("{\"msg\":\"hola\"}")
-    io.println(json.stringify(v))
+    val doc = json.parse("{\"msg\":\"hola\"}")
+    io.println(json.stringify(doc))
+    val scriptPath = path.joinPath("examples", "hello.nx")
+    io.println(scriptPath)
+    val request = http_client.buildHttpGetRequest("example.com", "/")
+    io.println(request)
 }

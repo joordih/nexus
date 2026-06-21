@@ -4,7 +4,7 @@ class ServerSocket(fd: Int) {
 
     accept(): Socket {
         var clientFd = nx_tcp_accept(this.fd)
-        return Socket(fd: clientFd)
+        return Socket(fd: clientFd, secure: false)
     }
 
     close(): Void {

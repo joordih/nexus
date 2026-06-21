@@ -4,15 +4,15 @@ final CALL_POS: Int = 1
 data CallArg {
     kind: Int
     label: String
-    val: Expr?
+    expr: Expr?
 }
 
 makeNamedArg(name: String, v: Expr): CallArg {
-    return CallArg(kind: CALL_NAMED, label: name, val: v)
+    return CallArg(kind: CALL_NAMED, label: name, expr: v)
 }
 
 makePosArg(v: Expr): CallArg {
-    return CallArg(kind: CALL_POS, label: "", val: v)
+    return CallArg(kind: CALL_POS, label: "", expr: v)
 }
 
 class Parser(tokens: List, pos: Int, errors: List) {
@@ -139,7 +139,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
 
     isStmtStart(): Bool {
         var k = this.currentKind()
-        return k == TK_VAR || k == TK_FINAL || k == TK_RETURN || k == TK_BREAK ||
+        return k == TK_VAR || k == TK_VAL || k == TK_FINAL || k == TK_RETURN || k == TK_BREAK ||
                k == TK_CONTINUE || k == TK_IF || k == TK_WHILE || k == TK_FOR ||
                k == TK_SWITCH || k == TK_TRY || k == TK_THROW ||
                k == TK_RBRACE || k == TK_EOF
@@ -259,7 +259,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
     }
 
     parseGlobalConst(anns: List): Item {
-        var isFinal = this.currentKind() == TK_FINAL
+        var isFinal = this.currentKind() == TK_FINAL || this.currentKind() == TK_VAL
         this.advance()
         var name = this.expectIdent()
         var ty = ""
@@ -268,9 +268,9 @@ class Parser(tokens: List, pos: Int, errors: List) {
             ty = this.parseTypeName()
         }
         this.expect(TK_EQ)
-        var val: Expr = this.parseExpr()
+        var initExpr: Expr = this.parseExpr()
         this.skipSemis()
-        var gc = GlobalConst(is_final: isFinal, name: name, ty: ty, const_val: val)
+        var gc = GlobalConst(is_final: isFinal, name: name, ty: ty, const_val: initExpr)
         var it = Item(kind: ITEM_GLOBAL, module_path: "", import_path: "",
             class_decl: null, data_decl: null, interface_decl: null,
             function_decl: null, global_const: gc)
@@ -600,7 +600,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         if (k == TK_VAR) {
             return this.parseVarStmt(false)
         }
-        if (k == TK_FINAL) {
+        if (k == TK_FINAL || k == TK_VAL) {
             return this.parseVarStmt(true)
         }
         if (k == TK_RETURN) {
@@ -652,21 +652,21 @@ class Parser(tokens: List, pos: Int, errors: List) {
             ty = this.parseTypeName()
         }
         this.expect(TK_EQ)
-        var val: Expr = this.parseExpr()
+        var initExpr: Expr = this.parseExpr()
         this.skipSemis()
-        return makeVarStmt(isFinal: isFinal, name: name, ty: ty, val: val, line: vsLn, col: vsCl)
+        return makeVarStmt(isFinal: isFinal, name: name, ty: ty, initExpr: initExpr, line: vsLn, col: vsCl)
     }
 
     parseReturnStmt(): Stmt {
         var rsLn = this.spanLine()
         var rsCl = this.spanCol()
         this.advance()
-        var val: Expr? = null
+        var retExpr: Expr? = null
         if (!this.isStmtStart() && this.currentKind() != TK_SEMI) {
-            val = this.parseExpr()
+            retExpr = this.parseExpr()
         }
         this.skipSemis()
-        return makeReturnStmt(val: val, line: rsLn, col: rsCl)
+        return makeReturnStmt(retExpr: retExpr, line: rsLn, col: rsCl)
     }
 
     parseIfStmt(): Stmt {
@@ -1082,8 +1082,8 @@ class Parser(tokens: List, pos: Int, errors: List) {
             var name = this.currentText()
             this.advance()
             this.advance()
-            var val: Expr = this.parseExpr()
-            return makeNamedArg(name: name, v: val)
+            var argExpr: Expr = this.parseExpr()
+            return makeNamedArg(name: name, v: argExpr)
         }
         var val2: Expr = this.parseExpr()
         return makePosArg(v: val2)
@@ -1339,17 +1339,17 @@ makeContinueStmt(line: Int, col: Int): Stmt {
         line: line, col: col)
 }
 
-makeVarStmt(isFinal: Bool, name: String, ty: String, val: Expr, line: Int, col: Int): Stmt {
+makeVarStmt(isFinal: Bool, name: String, ty: String, initExpr: Expr, line: Int, col: Int): Stmt {
     return Stmt(kind: STMT_VAR, is_final: isFinal, var_name: name, var_type: ty,
-        init_val: val, cond: null, then_stmts: List(), else_stmts: List(),
+        init_val: initExpr, cond: null, then_stmts: List(), else_stmts: List(),
         for_var: "", iterable: null, body_stmts: List(),
         switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
         line: line, col: col)
 }
 
-makeReturnStmt(val: Expr?, line: Int, col: Int): Stmt {
+makeReturnStmt(retExpr: Expr?, line: Int, col: Int): Stmt {
     return Stmt(kind: STMT_RETURN, is_final: false, var_name: "", var_type: "",
-        init_val: val, cond: null, then_stmts: List(), else_stmts: List(),
+        init_val: retExpr, cond: null, then_stmts: List(), else_stmts: List(),
         for_var: "", iterable: null, body_stmts: List(),
         switch_subject: null, switch_arms: List(), expr: null, assign_val: null,
         line: line, col: col)

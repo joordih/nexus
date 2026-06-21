@@ -1,0 +1,14 @@
+import std.io
+import std.core.integer
+import std.network.url
+
+main(): Void {
+    var params = URLSearchParams(order: List(), entries: Map())
+    params.append("q", "que dia es hoy")
+    params.append("apikey", "abc123")
+    io.println(params.toString())
+    var parsed = parseUrl("https://app.zenserp.com/api/v2/search?x=1")
+    io.println(parsed.host)
+    io.println(formatInt(parsed.port))
+    io.println(parsed.path)
+}

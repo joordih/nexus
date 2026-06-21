@@ -1,3 +1,5 @@
+import std.json.value
+
 escapeJsonString(s: String): String {
     var result = ""
     var i = 0

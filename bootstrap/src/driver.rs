@@ -524,7 +524,27 @@ pub fn compile_dir(dir: &str, output: &str) -> Result<(), String> {
     if let Ok(lib) = std::env::var("GC_LIB") {
         cmd.args(&["-L", &lib]);
     }
+    if let Ok(inc) = std::env::var("SSL_INCLUDE") {
+        cmd.args(&["-I", &inc]);
+    }
+    if let Ok(lib) = std::env::var("SSL_LIB") {
+        cmd.args(&["-L", &lib]);
+    }
     cmd.arg("-lgc");
+    #[cfg(target_os = "windows")]
+    {
+        cmd.arg("-llibssl");
+        cmd.arg("-llibcrypto");
+        cmd.arg("-lcrypt32");
+        cmd.arg("-ladvapi32");
+        cmd.arg("-luser32");
+        cmd.arg("-lws2_32");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        cmd.arg("-lssl");
+        cmd.arg("-lcrypto");
+    }
     #[cfg(target_os = "windows")]
     cmd.args(&["-Xlinker", "/subsystem:console", "-Wl,/Brepro"]);
     let status = cmd.status()
@@ -557,7 +577,27 @@ pub fn compile_file(nx_path: &str, output: &str) -> Result<(), String> {
     if let Ok(lib) = std::env::var("GC_LIB") {
         cmd.args(&["-L", &lib]);
     }
+    if let Ok(inc) = std::env::var("SSL_INCLUDE") {
+        cmd.args(&["-I", &inc]);
+    }
+    if let Ok(lib) = std::env::var("SSL_LIB") {
+        cmd.args(&["-L", &lib]);
+    }
     cmd.arg("-lgc");
+    #[cfg(target_os = "windows")]
+    {
+        cmd.arg("-llibssl");
+        cmd.arg("-llibcrypto");
+        cmd.arg("-lcrypt32");
+        cmd.arg("-ladvapi32");
+        cmd.arg("-luser32");
+        cmd.arg("-lws2_32");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        cmd.arg("-lssl");
+        cmd.arg("-lcrypto");
+    }
     #[cfg(target_os = "windows")]
     cmd.args(&["-Xlinker", "/subsystem:console", "-Wl,/Brepro"]);
     let status = cmd.status()

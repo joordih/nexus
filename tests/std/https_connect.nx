@@ -1,0 +1,12 @@
+import std.io
+import std.network.socket
+
+main(): Void {
+    var sock = connectTlsSocket("nexus-tls-test.invalid", 443)
+    if (sock == null) {
+        io.println("tls connect failed gracefully")
+    } else {
+        io.println("unexpected connection")
+        sock!.close()
+    }
+}

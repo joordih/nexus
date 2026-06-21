@@ -1,6 +1,10 @@
 import std.network.socket
 import std.core.strings
 import std.core.integer
+import std.core.string_builder
+
+final HTTP_READ_CHUNK: Int = 4096
+final HTTP_HEX_DIGITS: String = "0123456789abcdef"
 
 buildHttpGetRequest(host: String, path: String): String {
     return "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
@@ -12,6 +16,116 @@ parseHttpStatusLine(line: String): Int {
         return -1
     }
     return integer.parseInt(parts.get(1))
+}
+
+parseHeaderContentLength(line: String): Int {
+    var lower = toLowerCaseString(line)
+    var prefix = "content-length: "
+    if (!lower.startsWith(prefix)) {
+        return -1
+    }
+    var value = trimString(line.substring(prefix.length(), line.length()))
+    return parseInt(value)
+}
+
+parseHeaderTransferEncodingChunked(line: String): Bool {
+    var lower = toLowerCaseString(line)
+    var prefix = "transfer-encoding: "
+    if (!lower.startsWith(prefix)) {
+        return false
+    }
+    return indexOfSubstring(lower, "chunked", prefix.length()) >= 0
+}
+
+hexCharValue(c: Char): Int {
+    var lower = toLowerCaseString(c.toString())
+    var ch = lower.charAt(0)
+    var i = 0
+    while (i < HTTP_HEX_DIGITS.length()) {
+        if (HTTP_HEX_DIGITS.charAt(i) == ch) {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+parseChunkHexSize(hex: String): Int {
+    var result = 0
+    var i = 0
+    while (i < hex.length()) {
+        var v = hexCharValue(hex.charAt(i))
+        if (v < 0) {
+            return -1
+        }
+        result = result * 16 + v
+        i = i + 1
+    }
+    return result
+}
+
+decodeChunkedBody(raw: String): String {
+    var builder = StringBuilder(parts: List())
+    var pos = 0
+    while (pos < raw.length()) {
+        var lineEnd = indexOfSubstring(raw, "\r\n", pos)
+        if (lineEnd < 0) {
+            break
+        }
+        var sizeLine = raw.substring(pos, lineEnd)
+        var semi = indexOfSubstring(sizeLine, ";", 0)
+        if (semi >= 0) {
+            sizeLine = sizeLine.substring(0, semi)
+        }
+        sizeLine = trimString(sizeLine)
+        var chunkSize = parseChunkHexSize(sizeLine)
+        if (chunkSize < 0) {
+            break
+        }
+        if (chunkSize == 0) {
+            break
+        }
+        pos = lineEnd + 2
+        var chunkEnd = pos + chunkSize
+        if (chunkEnd > raw.length()) {
+            break
+        }
+        builder.append(raw.substring(pos, chunkEnd))
+        pos = chunkEnd + 2
+    }
+    return builder.toString()
+}
+
+readHttpResponseBody(sock: Socket, contentLength: Int): String {
+    if (contentLength >= 0) {
+        return sock.readBytes(contentLength)
+    }
+    var builder = StringBuilder(parts: List())
+    var done = false
+    while (!done) {
+        var chunk = sock.readBytes(HTTP_READ_CHUNK)
+        if (chunk.length() == 0) {
+            done = true
+        } else {
+            builder.append(chunk)
+            if (chunk.length() < HTTP_READ_CHUNK) {
+                done = true
+            }
+        }
+    }
+    return builder.toString()
+}
+
+httpGetOverTls(host: String, port: Int, path: String): Int {
+    var sock = connectTlsSocket(host, port)
+    if (sock == null) {
+        return -1
+    }
+    var request = buildHttpGetRequest(host, path)
+    sock!.writeText(request)
+    var statusLine = sock!.readLine()
+    sock!.close()
+    return parseHttpStatusLine(statusLine)
 }
 
 class HttpClient(host: String, port: Int) {

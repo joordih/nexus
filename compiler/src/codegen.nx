@@ -3,6 +3,17 @@ import compiler.ast
 import compiler.sema
 import compiler.parser
 
+isFloatingTy(ty: NxType): Bool {
+    return ty.kind == NXTYPE_FLOAT || ty.kind == NXTYPE_DOUBLE
+}
+
+arithResultTy(lt: NxType, rt: NxType): NxType {
+    if (isFloatingTy(lt) || isFloatingTy(rt)) {
+        return makeNxTypeSimple(NXTYPE_DOUBLE)
+    }
+    return makeNxTypeSimple(NXTYPE_INT)
+}
+
 class CGen(
     ctx: SemaCtx,
     out: String,
@@ -114,11 +125,11 @@ class CGen(
         return "(" + cty + ")(" + expr + ")"
     }
 
-    voidCastIn(ty: NxType, val: String): String {
+    voidCastIn(ty: NxType, s: String): String {
         if (ty.kind == NXTYPE_INT || ty.kind == NXTYPE_LONG || ty.kind == NXTYPE_BOOL || ty.kind == NXTYPE_CHAR) {
-            return "(void*)(intptr_t)(" + val + ")"
+            return "(void*)(intptr_t)(" + s + ")"
         }
-        return "(void*)(" + val + ")"
+        return "(void*)(" + s + ")"
     }
 
     fnSignature(fn: Function, className: String): String {
@@ -341,8 +352,8 @@ class CGen(
             return
         }
         if (fn.body_expr != null) {
-            var val = this.genExpr(fn.body_expr!, null)
-            this.emitLine("return " + val + ";")
+            var emitted = this.genExpr(fn.body_expr!, null)
+            this.emitLine("return " + emitted + ";")
         }
     }
 
@@ -365,9 +376,9 @@ class CGen(
                 declaredTy = exprTy
             }
             var cty = this.nxTypeToCType(declaredTy)
-            var val = this.genExpr(stmt.init_val!, declaredTy)
+            var emitted = this.genExpr(stmt.init_val!, declaredTy)
             this.setVarType(stmt.var_name, declaredTy)
-            this.emitLine(cty + " " + stmt.var_name + " = " + val + ";")
+            this.emitLine(cty + " " + stmt.var_name + " = " + emitted + ";")
             return
         }
         if (stmt.kind == STMT_RETURN) {
@@ -608,8 +619,12 @@ class CGen(
             if (recvTy.kind == NXTYPE_STRING && expr.field_name == "length") {
                 return makeNxTypeSimple(NXTYPE_INT)
             }
-            if (recvTy.kind == NXTYPE_NAMED) {
-                var si2 = this.ctx.findStruct(recvTy.name)
+            var baseTy = recvTy
+            if (recvTy.kind == NXTYPE_NULLABLE && recvTy.elem != null) {
+                baseTy = recvTy.elem!
+            }
+            if (baseTy.kind == NXTYPE_NAMED) {
+                var si2 = this.ctx.findStruct(baseTy.name)
                 if (si2 != null) {
                     var fi = 0
                     while (fi < si2!.fields.len()) {
@@ -632,10 +647,12 @@ class CGen(
                 if (lt.kind == NXTYPE_STRING || rt.kind == NXTYPE_STRING) {
                     return makeNxTypeSimple(NXTYPE_STRING)
                 }
-                return makeNxTypeSimple(NXTYPE_INT)
+                return arithResultTy(lt, rt)
             }
             if (expr.op == OP_SUB || expr.op == OP_MUL || expr.op == OP_DIV || expr.op == OP_MOD) {
-                return makeNxTypeSimple(NXTYPE_INT)
+                var lt2 = this.inferExprType(expr.left!)
+                var rt2 = this.inferExprType(expr.right!)
+                return arithResultTy(lt2, rt2)
             }
             return makeNxTypeSimple(NXTYPE_BOOL)
         }
@@ -693,12 +710,13 @@ class CGen(
                 name == "nx_read_header_line" || name == "nx_read_stdin_n" ||
                 name == "nx_run_capture" || name == "nx_run_binary_capture" ||
                 name == "nx_tcp_read_line" || name == "nx_tcp_read" ||
+                name == "nx_tls_read_line" || name == "nx_tls_read" ||
                 name == "nx_fread_n" || name == "nx_getenv") {
                 return makeNxTypeSimple(NXTYPE_STRING)
             }
             if (name == "nx_get_arg_count" || name == "nx_tcp_listen" || name == "nx_tcp_accept" ||
                 name == "nx_write_stdout_n" || name == "nx_stat_size" || name == "nx_fopen" ||
-                name == "nx_time_now" || name == "nx_tcp_connect") {
+                name == "nx_time_now" || name == "nx_tcp_connect" || name == "nx_tls_connect") {
                 return makeNxTypeSimple(NXTYPE_INT)
             }
             if (name == "nx_string_ends_with" || name == "nx_string_lt" ||
@@ -779,8 +797,8 @@ class CGen(
                 return makeNxTypeSimple(NXTYPE_BOOL)
             }
             if (expr.method_name == "get" || expr.method_name == "getInt") {
-                if (effectiveTy.val != null) {
-                    return effectiveTy.val!
+                if (effectiveTy.map_val != null) {
+                    return effectiveTy.map_val!
                 }
             }
             return nxTypeUnknown()
@@ -805,8 +823,8 @@ class CGen(
             return ""
         }
         var arg: CallArg = args.get(idx)
-        if (arg.val != null) {
-            return this.genExpr(arg.val!, null)
+        if (arg.expr != null) {
+            return this.genExpr(arg.expr!, null)
         }
         return ""
     }
@@ -816,27 +834,38 @@ class CGen(
             return nxTypeUnknown()
         }
         var arg: CallArg = args.get(idx)
-        if (arg.val != null) {
-            return this.inferExprType(arg.val!)
+        if (arg.expr != null) {
+            return this.inferExprType(arg.expr!)
         }
         return nxTypeUnknown()
     }
 
     coerceToString(expr: Expr, ty: NxType): String {
-        var val = this.genExpr(expr, null)
+        var emitted = this.genExpr(expr, null)
         if (ty.kind == NXTYPE_STRING) {
-            return val
+            return emitted
         }
         if (ty.kind == NXTYPE_INT || ty.kind == NXTYPE_LONG) {
-            return "nx_int_to_string(" + val + ")"
+            return "nx_int_to_string(" + emitted + ")"
         }
         if (ty.kind == NXTYPE_BOOL) {
-            return "nx_bool_to_string(" + val + ")"
+            return "nx_bool_to_string(" + emitted + ")"
         }
         if (ty.kind == NXTYPE_CHAR) {
-            return "nx_char_to_string(" + val + ")"
+            return "nx_char_to_string(" + emitted + ")"
         }
-        return val
+        if (ty.kind == NXTYPE_FLOAT || ty.kind == NXTYPE_DOUBLE) {
+            return "nx_double_to_string(" + emitted + ")"
+        }
+        return emitted
+    }
+
+    promoteToDouble(expr: Expr, ty: NxType): String {
+        var code = this.genExpr(expr, null)
+        if (isFloatingTy(ty)) {
+            return code
+        }
+        return "((double)" + code + ")"
     }
 
     genExpr(expr: Expr, hint: NxType?): String {
@@ -955,8 +984,15 @@ class CGen(
             return "((" + inner2 + ") != NULL ? (" + inner2 + ") : (nx_panic(\"null assertion failed\"), (" + cty + ")NULL))"
         }
         if (expr.kind == EXPR_ELVIS) {
+            var leftTy = this.inferExprType(expr.left!)
             var l = this.genExpr(expr.left!, null)
             var r = this.genExpr(expr.right!, null)
+            if (leftTy.kind == NXTYPE_INT || leftTy.kind == NXTYPE_LONG) {
+                return "((" + l + ") != 0 ? (" + l + ") : (" + r + "))"
+            }
+            if (leftTy.kind == NXTYPE_CHAR) {
+                return "((" + l + ") != 0 ? (" + l + ") : (" + r + "))"
+            }
             return "((" + l + ") != NULL ? (" + l + ") : (" + r + "))"
         }
         if (expr.kind == EXPR_LAMBDA) {
@@ -1009,8 +1045,15 @@ class CGen(
                 return "(!nx_string_equals(" + lv + ", " + rv + "))"
             }
         }
+        var lt3 = this.inferExprType(expr.left!)
+        var rt3 = this.inferExprType(expr.right!)
+        var isArith = expr.op == OP_ADD || expr.op == OP_SUB || expr.op == OP_MUL || expr.op == OP_DIV || expr.op == OP_MOD
         var l = this.genExpr(expr.left!, null)
         var r = this.genExpr(expr.right!, null)
+        if (isArith && isFloatingTy(arithResultTy(lt3, rt3))) {
+            l = this.promoteToDouble(expr.left!, lt3)
+            r = this.promoteToDouble(expr.right!, rt3)
+        }
         var opStr = ""
         if (expr.op == OP_ADD) {
             opStr = "+"
@@ -1089,6 +1132,9 @@ class CGen(
                     name == "nx_tcp_listen" || name == "nx_tcp_accept" ||
                     name == "nx_tcp_read_line" || name == "nx_tcp_read" || name == "nx_tcp_write" ||
                     name == "nx_tcp_close" || name == "nx_tcp_connect" ||
+                    name == "nx_tls_connect" || name == "nx_tls_read" ||
+                    name == "nx_tls_read_line" || name == "nx_tls_write" ||
+                    name == "nx_tls_close" ||
                     name == "nx_file_exists" || name == "nx_mkdir" || name == "nx_delete" ||
                     name == "nx_rename" || name == "nx_stat_size" || name == "nx_stat_is_dir" ||
                     name == "nx_fopen" || name == "nx_fclose" || name == "nx_fread_n" ||
@@ -1139,8 +1185,8 @@ class CGen(
                     var i = 0
                     while (i < expr.args.len()) {
                         var arg: CallArg = expr.args.get(i)
-                        if (arg.val != null) {
-                            argsStr2 = argsStr2 + ", " + this.genExpr(arg.val!, null)
+                        if (arg.expr != null) {
+                            argsStr2 = argsStr2 + ", " + this.genExpr(arg.expr!, null)
                         }
                         i = i + 1
                     }
@@ -1161,8 +1207,8 @@ class CGen(
             if (i > 0) {
                 result = result + ", "
             }
-            if (arg.val != null) {
-                result = result + this.genExpr(arg.val!, null)
+            if (arg.expr != null) {
+                result = result + this.genExpr(arg.expr!, null)
             }
             i = i + 1
         }
@@ -1189,8 +1235,8 @@ class CGen(
             while (j < namedArgs.len()) {
                 var arg2: CallArg = namedArgs.get(j)
                 var fval = ""
-                if (arg2.val != null) {
-                    fval = this.genExpr(arg2.val!, null)
+                if (arg2.expr != null) {
+                    fval = this.genExpr(arg2.expr!, null)
                 }
                 this.emitLine(tmp + "->" + arg2.label + " = " + fval + ";")
                 j = j + 1
@@ -1203,8 +1249,8 @@ class CGen(
                 if (k < posArgs.len()) {
                     var arg3: CallArg = posArgs.get(k)
                     var fval2 = ""
-                    if (arg3.val != null) {
-                        fval2 = this.genExpr(arg3.val!, null)
+                    if (arg3.expr != null) {
+                        fval2 = this.genExpr(arg3.expr!, null)
                     }
                     this.emitLine(tmp + "->" + sf.name + " = " + fval2 + ";")
                 }
@@ -1219,9 +1265,9 @@ class CGen(
         if (method == "println") {
             if (args.len() == 1) {
                 var arg: CallArg = args.get(0)
-                if (arg.val != null) {
-                    var argTy = this.inferExprType(arg.val!)
-                    var argStr = this.genExpr(arg.val!, null)
+                if (arg.expr != null) {
+                    var argTy = this.inferExprType(arg.expr!)
+                    var argStr = this.genExpr(arg.expr!, null)
                     if (argTy.kind == NXTYPE_INT || argTy.kind == NXTYPE_LONG) {
                         return "nx_println_int(" + argStr + ")"
                     }
@@ -1231,6 +1277,9 @@ class CGen(
                     if (argTy.kind == NXTYPE_CHAR) {
                         return "nx_println_char(" + argStr + ")"
                     }
+                    if (argTy.kind == NXTYPE_FLOAT || argTy.kind == NXTYPE_DOUBLE) {
+                        return "nx_println_double(" + argStr + ")"
+                    }
                     return "nx_println_string(" + argStr + ")"
                 }
             }
@@ -1239,9 +1288,9 @@ class CGen(
         if (method == "print") {
             if (args.len() == 1) {
                 var arg2: CallArg = args.get(0)
-                if (arg2.val != null) {
-                    var argTy2 = this.inferExprType(arg2.val!)
-                    var argStr2 = this.genExpr(arg2.val!, null)
+                if (arg2.expr != null) {
+                    var argTy2 = this.inferExprType(arg2.expr!)
+                    var argStr2 = this.genExpr(arg2.expr!, null)
                     if (argTy2.kind == NXTYPE_INT || argTy2.kind == NXTYPE_LONG) {
                         return "nx_print_int(" + argStr2 + ")"
                     }
@@ -1328,8 +1377,8 @@ class CGen(
             var i = 0
             while (i < expr.args.len()) {
                 var arg: CallArg = expr.args.get(i)
-                if (arg.val != null) {
-                    allArgs = allArgs + ", " + this.genExpr(arg.val!, null)
+                if (arg.expr != null) {
+                    allArgs = allArgs + ", " + this.genExpr(arg.expr!, null)
                 }
                 i = i + 1
             }
@@ -1339,8 +1388,8 @@ class CGen(
         var i2 = 0
         while (i2 < expr.args.len()) {
             var arg2: CallArg = expr.args.get(i2)
-            if (arg2.val != null) {
-                argsStr = argsStr + ", " + this.genExpr(arg2.val!, null)
+            if (arg2.expr != null) {
+                argsStr = argsStr + ", " + this.genExpr(arg2.expr!, null)
             }
             i2 = i2 + 1
         }
@@ -1401,9 +1450,9 @@ class CGen(
             return "(nx_list_len(" + recv + ") == 0)"
         }
         if (method == "push" || method == "add") {
-            var val = this.getArgStr(args, 0)
+            var argStr = this.getArgStr(args, 0)
             var argTy = this.getArgType(args, 0)
-            var cast = this.voidCastIn(argTy, val)
+            var cast = this.voidCastIn(argTy, argStr)
             return "nx_list_push(" + recv + ", " + cast + ")"
         }
         if (method == "get") {
@@ -1426,8 +1475,8 @@ class CGen(
 
     genMapMethod(recv: String, mapTy: NxType, method: String, args: List): String {
         var valTy = nxTypeUnknown()
-        if (mapTy.val != null) {
-            valTy = mapTy.val!
+        if (mapTy.map_val != null) {
+            valTy = mapTy.map_val!
         }
         if (method == "len" || method == "size") {
             return "nx_map_len(" + recv + ")"

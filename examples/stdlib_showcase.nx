@@ -31,55 +31,55 @@ reportBool(label: String, value: Bool): Void {
 }
 
 main(): Void {
-    var doc = json.parse("{\"name\":\"nexus\",\"version\":1}")
+    val doc = json.parse("{\"name\":\"nexus\",\"version\":1}")
     reportLine("json_roundtrip", json.stringify(doc))
 
     reportLine("math_abs", integer.formatInt(math.absInt(-42)))
     reportLine("strings_trim", strings.trimString("  stdlib  "))
 
-    var builder = StringBuilder(parts: List())
+    val builder = StringBuilder(parts: List())
     builder.append("nex")
     builder.append("us")
     reportLine("string_builder", builder.toString())
 
-    var list = ArrayList(elems: List())
+    val list = ArrayList(elems: List())
     list.add("alpha")
     list.add("beta")
     reportLine("array_list_size", integer.formatInt(list.size()))
 
-    var stack = Stack(elems: List(), count: 0)
+    val stack = Stack(elems: List(), count: 0)
     stack.push("one")
     stack.push("two")
     reportLine("stack_top", stack.peek())
 
-    var ordered = LinkedHashMap(order: List(), entries: Map())
+    val ordered = LinkedHashMap(order: List(), entries: Map())
     ordered.put("first", "one")
     ordered.put("second", "two")
     reportLine("linked_hash_order", ordered.keyAt(0))
     reportLine("linked_hash_get", ordered.get("second")!)
 
-    var sorted = TreeSet(sortedKeys: List(), members: Map())
+    val sorted = TreeSet(sortedKeys: List(), members: Map())
     sorted.add("cherry")
     sorted.add("apple")
     sorted.add("banana")
     reportLine("tree_set_first", sorted.keyAt(0))
 
-    var maybe = optionalOf("ready")
+    val maybe = optionalOf("ready")
     reportLine("optional_value", maybe.orElse("missing"))
 
-    var joined = path.joinPath("examples", "hello.nx")
+    val joined = path.joinPath("examples", "hello.nx")
     reportLine("path_join", joined)
     reportBool("files_exists", files.exists(joined))
 
     reportLine("epoch_date", local_date.localDateFromEpoch(0).toString())
     reportLine("duration_secs", integer.formatInt(duration.durationSeconds(120).toSeconds()))
 
-    var pattern = matcher.compilePattern("N.xus")
+    val pattern = matcher.compilePattern("N.xus")
     reportBool("regex_match", matcher.matchPattern(pattern, "Nexus"))
 
     reportBool("env_path_set", nx_string_len(getEnv("PATH")) > 0)
 
-    var request = http_client.buildHttpGetRequest("example.com", "/")
+    val request = http_client.buildHttpGetRequest("example.com", "/")
     reportBool("http_has_host", nx_string_contains(request, "Host: example.com"))
 
     var caught = false

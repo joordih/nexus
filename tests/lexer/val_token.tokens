@@ -1,0 +1,5 @@
+val
+Ident(x)
+=
+Int(1)
+EOF

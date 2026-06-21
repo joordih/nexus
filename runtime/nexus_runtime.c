@@ -1,4 +1,8 @@
 #include "nexus_runtime.h"
+#include "nexus_link_config.h"
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #include <time.h>
 #include <errno.h>
@@ -196,6 +200,18 @@ NxString nx_int_to_string(NxInt n) {
     return buf;
 }
 
+#define NX_DBL_STR_BUF 64
+
+NxString nx_double_to_string(double d) {
+    char* buf = GC_MALLOC(NX_DBL_STR_BUF);
+    snprintf(buf, NX_DBL_STR_BUF, "%.15g", d);
+    return buf;
+}
+
+NxString nx_float_to_string(double f) {
+    return nx_double_to_string(f);
+}
+
 NxString nx_bool_to_string(NxBool b) {
     return b ? "true" : "false";
 }
@@ -223,6 +239,11 @@ NxInt nx_string_len(NxString s) {
 
 NxChar nx_string_char_at(NxString s, NxInt i) {
     return s[i];
+}
+
+void nx_println_double(double d) {
+    NxString s = nx_double_to_string(d);
+    nx_println_string(s);
 }
 
 void nx_println_int(NxInt n) {
@@ -637,16 +658,50 @@ void nx_throw(void) {
     longjmp(_nx_try_bufs[_nx_try_depth - 1], 1);
 }
 
+static const char* nx_link_path_or_default(const char* env_value, const char* baked_value) {
+    if (env_value && env_value[0] != '\0') {
+        return env_value;
+    }
+    if (baked_value && baked_value[0] != '\0') {
+        return baked_value;
+    }
+    return NULL;
+}
+
+static void nx_path_flag(char* buf, size_t buf_size, const char* opt, const char* path) {
+    if (!path) {
+        buf[0] = '\0';
+        return;
+    }
+    if (strchr(path, ' ') != NULL) {
+        snprintf(buf, buf_size, "%s \"%s\"", opt, path);
+    } else {
+        snprintf(buf, buf_size, "%s %s", opt, path);
+    }
+}
+
 void nx_compile_c(NxString c_path, NxString output) {
     char cmd[NX_CMD_BUF];
-    const char* gc_include = getenv("GC_INCLUDE");
-    const char* gc_lib = getenv("GC_LIB");
+    const char* gc_include = nx_link_path_or_default(getenv("GC_INCLUDE"), NX_DEFAULT_GC_INCLUDE);
+    const char* gc_lib = nx_link_path_or_default(getenv("GC_LIB"), NX_DEFAULT_GC_LIB);
+    const char* ssl_include = nx_link_path_or_default(getenv("SSL_INCLUDE"), NX_DEFAULT_SSL_INCLUDE);
+    const char* ssl_lib = nx_link_path_or_default(getenv("SSL_LIB"), NX_DEFAULT_SSL_LIB);
     const char* cc = getenv("CC");
     if (!cc) cc = "clang";
+    char cc_quoted[NX_FLAG_BUF];
+    if (strchr(cc, ' ') != NULL) {
+        snprintf(cc_quoted, sizeof(cc_quoted), "\"%s\"", cc);
+    } else {
+        snprintf(cc_quoted, sizeof(cc_quoted), "%s", cc);
+    }
     char inc_flag[NX_FLAG_BUF] = "";
     char lib_flag[NX_FLAG_BUF] = "";
-    if (gc_include) snprintf(inc_flag, sizeof(inc_flag), "-I \"%s\"", gc_include);
-    if (gc_lib) snprintf(lib_flag, sizeof(lib_flag), "-L \"%s\"", gc_lib);
+    char ssl_inc_flag[NX_FLAG_BUF] = "";
+    char ssl_lib_flag[NX_FLAG_BUF] = "";
+    nx_path_flag(inc_flag, sizeof(inc_flag), "-I", gc_include);
+    nx_path_flag(lib_flag, sizeof(lib_flag), "-L", gc_lib);
+    nx_path_flag(ssl_inc_flag, sizeof(ssl_inc_flag), "-I", ssl_include);
+    nx_path_flag(ssl_lib_flag, sizeof(ssl_lib_flag), "-L", ssl_lib);
     const char* gc_static = getenv("GC_STATIC");
 #ifdef _WIN32
     int use_static_default = 1;
@@ -669,13 +724,18 @@ void nx_compile_c(NxString c_path, NxString output) {
 #endif
 
 #ifdef _WIN32
-    const char* repro_flag = "-Wl,/Brepro";
+    const char* repro_flag = "-Xlinker /subsystem:console -Wl,/Brepro";
 #else
     const char* repro_flag = "";
 #endif
+#ifdef _WIN32
+    const char* ssl_link = "-llibssl -llibcrypto -lcrypt32 -ladvapi32 -luser32 -lws2_32";
+#else
+    const char* ssl_link = "-lssl -lcrypto";
+#endif
     snprintf(cmd, sizeof(cmd),
-        "%s %s runtime/nexus_runtime.c -I runtime %s %s %s %s -Wno-return-type -Wno-deprecated-declarations -o %s",
-        cc, c_path, inc_flag, lib_flag, gc_link, repro_flag, output_path);
+        "%s %s runtime/nexus_runtime.c -I runtime %s %s %s %s %s %s %s -Wno-return-type -Wno-deprecated-declarations -o %s",
+        cc_quoted, c_path, inc_flag, ssl_inc_flag, lib_flag, ssl_lib_flag, gc_link, ssl_link, repro_flag, output_path);
     int ret = system(cmd);
     if (ret != 0) {
         fprintf(stderr, "compilacion C fallo: %s\n", c_path);
@@ -936,3 +996,164 @@ NxInt nx_tcp_connect(NxString host, NxInt port) {
     return (NxInt)s;
 }
 #endif
+
+#define NX_TLS_MAX_CONN 64
+
+typedef struct NxTlsConn {
+    SSL* ssl;
+    SSL_CTX* ctx;
+    NxInt fd;
+    NxBool in_use;
+} NxTlsConn;
+
+static NxTlsConn _nx_tls_conns[NX_TLS_MAX_CONN];
+static NxBool _nx_tls_init_done = NX_FALSE;
+
+static void nx_tls_ensure_init(void) {
+    if (_nx_tls_init_done) {
+        return;
+    }
+    OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
+    _nx_tls_init_done = NX_TRUE;
+}
+
+void nx_tls_ensure_init_test(void) {
+    nx_tls_ensure_init();
+}
+
+static NxInt nx_tls_alloc_slot(void) {
+    NxInt i = 0;
+    while (i < NX_TLS_MAX_CONN) {
+        if (!_nx_tls_conns[i].in_use) {
+            return i;
+        }
+        i++;
+    }
+    return -1;
+}
+
+static NxBool nx_tls_handle_valid(NxInt handle) {
+    return handle >= 0 && handle < NX_TLS_MAX_CONN && _nx_tls_conns[handle].in_use;
+}
+
+NxInt nx_tls_connect(NxString host, NxInt port) {
+    nx_tls_ensure_init();
+    NxInt slot = nx_tls_alloc_slot();
+    if (slot < 0) {
+        return -1;
+    }
+    NxInt fd = nx_tcp_connect(host, port);
+    if (fd < 0) {
+        return -1;
+    }
+    SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
+    if (!ctx) {
+        nx_tcp_close(fd);
+        return -1;
+    }
+    const char* ca_bundle = getenv("NX_TLS_CA_BUNDLE");
+    if (ca_bundle) {
+        if (SSL_CTX_load_verify_locations(ctx, ca_bundle, NULL) == 1) {
+            SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+        }
+    }
+    SSL* ssl = SSL_new(ctx);
+    if (!ssl) {
+        SSL_CTX_free(ctx);
+        nx_tcp_close(fd);
+        return -1;
+    }
+    SSL_set_fd(ssl, (int)fd);
+    SSL_set_tlsext_host_name(ssl, host);
+    if (SSL_connect(ssl) != 1) {
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        nx_tcp_close(fd);
+        return -1;
+    }
+    _nx_tls_conns[slot].ssl = ssl;
+    _nx_tls_conns[slot].ctx = ctx;
+    _nx_tls_conns[slot].fd = fd;
+    _nx_tls_conns[slot].in_use = NX_TRUE;
+    return slot;
+}
+
+NxString nx_tls_read(NxInt handle, NxInt n) {
+    if (n <= 0 || !nx_tls_handle_valid(handle)) {
+        return "";
+    }
+    SSL* ssl = _nx_tls_conns[handle].ssl;
+    char* buf = GC_MALLOC((size_t)n + 1);
+    NxInt total = 0;
+    while (total < n) {
+        int got = SSL_read(ssl, buf + total, (int)(n - total));
+        if (got <= 0) {
+            break;
+        }
+        total += got;
+    }
+    buf[total] = '\0';
+    return buf;
+}
+
+NxString nx_tls_read_line(NxInt handle) {
+    char* buf = GC_MALLOC(NX_LINE_BUF);
+    NxInt pos = 0;
+    if (!nx_tls_handle_valid(handle)) {
+        buf[0] = '\0';
+        return buf;
+    }
+    SSL* ssl = _nx_tls_conns[handle].ssl;
+    while (pos < NX_LINE_BUF - 1) {
+        char ch;
+        int got = SSL_read(ssl, &ch, 1);
+        if (got <= 0) {
+            break;
+        }
+        if (ch == '\r') {
+            char next;
+            int got2 = SSL_read(ssl, &next, 1);
+            if (got2 > 0 && next != '\n') {
+                buf[pos++] = ch;
+                buf[pos++] = next;
+            }
+            break;
+        }
+        if (ch == '\n') {
+            break;
+        }
+        buf[pos++] = ch;
+    }
+    buf[pos] = '\0';
+    return buf;
+}
+
+void nx_tls_write(NxInt handle, NxString s, NxInt n) {
+    if (n <= 0 || !nx_tls_handle_valid(handle)) {
+        return;
+    }
+    SSL* ssl = _nx_tls_conns[handle].ssl;
+    NxInt total = 0;
+    while (total < n) {
+        int sent = SSL_write(ssl, s + total, (int)(n - total));
+        if (sent <= 0) {
+            nx_panic("tls write fallo");
+        }
+        total += sent;
+    }
+}
+
+void nx_tls_close(NxInt handle) {
+    if (!nx_tls_handle_valid(handle)) {
+        return;
+    }
+    SSL* ssl = _nx_tls_conns[handle].ssl;
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    SSL_CTX_free(_nx_tls_conns[handle].ctx);
+    nx_tcp_close(_nx_tls_conns[handle].fd);
+    _nx_tls_conns[handle].ssl = NULL;
+    _nx_tls_conns[handle].ctx = NULL;
+    _nx_tls_conns[handle].fd = -1;
+    _nx_tls_conns[handle].in_use = NX_FALSE;
+}

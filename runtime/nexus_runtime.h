@@ -72,6 +72,8 @@ NxBool nx_map_contains(NxMap* map, NxString key);
 NxInt nx_map_len(NxMap* map);
 
 NxString nx_int_to_string(NxInt n);
+NxString nx_float_to_string(double f);
+NxString nx_double_to_string(double d);
 NxString nx_bool_to_string(NxBool b);
 NxString nx_char_to_string(NxChar c);
 NxString nx_string_concat(NxString a, NxString b);
@@ -79,6 +81,7 @@ NxInt nx_string_len(NxString s);
 NxChar nx_string_char_at(NxString s, NxInt i);
 
 void nx_println_int(NxInt n);
+void nx_println_double(double d);
 void nx_println_bool(NxBool b);
 void nx_println_char(NxChar c);
 void nx_println_string(NxString s);
@@ -121,6 +124,12 @@ NxString nx_getenv(NxString name);
 NxInt nx_time_now(void);
 
 NxInt nx_tcp_connect(NxString host, NxInt port);
+NxInt nx_tls_connect(NxString host, NxInt port);
+NxString nx_tls_read(NxInt handle, NxInt n);
+NxString nx_tls_read_line(NxInt handle);
+void nx_tls_write(NxInt handle, NxString s, NxInt n);
+void nx_tls_close(NxInt handle);
+void nx_tls_ensure_init_test(void);
 
 void nx_try_push(jmp_buf buf);
 void nx_try_pop(void);

@@ -1,0 +1,45 @@
+import std.io
+import std.json
+import std.json.access
+import std.network.url
+import std.network.fetch
+import std.system.environment
+
+final ZENSERP_SEARCH_URL: String = "https://app.zenserp.com/api/v2/search"
+
+main(): Void {
+    val apiKey = getEnv("ZENSERP_API_KEY")
+    if (nx_string_len(apiKey) == 0) {
+        io.println("Define ZENSERP_API_KEY")
+        return
+    }
+
+    val params = URLSearchParams(order: List(), entries: Map())
+    params.append("q", "que dia es hoy")
+    params.append("apikey", apiKey)
+
+    val url = ZENSERP_SEARCH_URL + "?" + params.toString()
+    io.println("GET " + url)
+
+    try {
+        val response = fetch(url)
+        if (!response.ok) {
+            throw
+        }
+        val data = response.json()
+        val queryObj = jsonGetField(data, "query")
+        if (queryObj != null) {
+            io.println("Query: " + jsonGetString(queryObj!, "q"))
+        }
+        io.println("Results: " + jsonGetInt(data, "number_of_results"))
+        val organic = jsonGetField(data, "organic")
+        if (organic != null && jsonArrayLen(organic!) > 0) {
+            val first = jsonArrayGet(organic!, 0)
+            if (first != null) {
+                io.println("Top: " + jsonGetString(first!, "title"))
+            }
+        }
+    } catch (err) {
+        io.println("Error")
+    }
+}

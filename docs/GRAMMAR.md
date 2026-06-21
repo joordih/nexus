@@ -33,7 +33,7 @@ IDENT  = letter { letter | digit } ;
 Palabras reservadas:
 
 ```
-var final class data value interface annotation
+var val final class data value interface annotation
 import module extends implements
 if else while for in switch case default
 return break continue try catch throw
@@ -98,7 +98,7 @@ dot_path    = IDENT { "." IDENT } ;
 ### Constantes y variables globales
 
 ```
-global_decl = ( "var" | "final" ) IDENT [ ":" type ] "=" expr [ ";" ] ;
+global_decl = ( "var" | "val" | "final" ) IDENT [ ":" type ] "=" expr [ ";" ] ;
 ```
 
 ### Anotaciones aplicadas
@@ -191,7 +191,7 @@ stmt        = var_stmt
             | throw_stmt
             | expr_stmt ;
 
-var_stmt    = ( "var" | "final" ) IDENT [ ":" type ] "=" expr [ ";" ] ;
+var_stmt    = ( "var" | "val" | "final" ) IDENT [ ":" type ] "=" expr [ ";" ] ;
 return_stmt = "return" [ expr ] [ ";" ] ;
 break_stmt  = "break" [ ";" ] ;
 continue_stmt = "continue" [ ";" ] ;

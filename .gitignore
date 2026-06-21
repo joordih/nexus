@@ -1,10 +1,16 @@
 build/
+runtime/nexus_link_config.h
 bootstrap/target/
 *.out
+tests/**/*.out.exe
 tests/**/*.c
 tests/**/*.c.expected
 compiler/**/*.c
 examples/build/
+
+agent-tools/
+terminals/
+mcps/
 
 node_modules/
 out/
@@ -23,3 +29,6 @@ editors/intellij/build/
 editors/intellij/src/main/gen/
 editors/intellij/.intellijPlatform/
 editors/intellij/.run/
+
+plans/
+docs/

@@ -1,0 +1,12 @@
+import std.io
+
+data User {
+    email: String?
+}
+
+main(): Void {
+    final u = User(email: "a@b.c")
+    final n = User(email: null)
+    io.println(u.email?.length())
+    io.println(n.email?.length() ?: -1)
+}

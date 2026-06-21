@@ -20,31 +20,57 @@ data NxType {
     name: String
     elem: NxType?
     key: NxType?
-    val: NxType?
+    map_val: NxType?
 }
 
 makeNxTypeSimple(kind: Int): NxType {
-    return NxType(kind: kind, name: "", elem: null, key: null, val: null)
+    return NxType(kind: kind, name: "", elem: null, key: null, map_val: null)
 }
 
 makeNxTypeNamed(name: String): NxType {
-    return NxType(kind: NXTYPE_NAMED, name: name, elem: null, key: null, val: null)
+    return NxType(kind: NXTYPE_NAMED, name: name, elem: null, key: null, map_val: null)
 }
 
 makeNxTypeList(elem: NxType): NxType {
-    return NxType(kind: NXTYPE_LIST, name: "", elem: elem, key: null, val: null)
+    return NxType(kind: NXTYPE_LIST, name: "", elem: elem, key: null, map_val: null)
 }
 
 makeNxTypeMap(k: NxType, v: NxType): NxType {
-    return NxType(kind: NXTYPE_MAP, name: "", elem: null, key: k, val: v)
+    return NxType(kind: NXTYPE_MAP, name: "", elem: null, key: k, map_val: v)
 }
 
 makeNxTypeNullable(inner: NxType): NxType {
-    return NxType(kind: NXTYPE_NULLABLE, name: "", elem: inner, key: null, val: null)
+    return NxType(kind: NXTYPE_NULLABLE, name: "", elem: inner, key: null, map_val: null)
 }
 
 nxTypeUnknown(): NxType {
     return makeNxTypeSimple(NXTYPE_UNKNOWN)
+}
+
+unwrapNullableTy(ty: NxType): NxType {
+    if (ty.kind == NXTYPE_NULLABLE && ty.elem != null) {
+        return ty.elem!
+    }
+    return ty
+}
+
+lookupStructField(ctx: SemaCtx, structName: String, fieldName: String): NxType? {
+    var si = ctx.findStruct(structName)
+    if (si == null) {
+        return null
+    }
+    var k = 0
+    while (k < si!.fields.len()) {
+        var sf: StructField = si!.fields.get(k)
+        if (sf.name == fieldName) {
+            if (sf.ty != null) {
+                return sf.ty!
+            }
+            return null
+        }
+        k = k + 1
+    }
+    return null
 }
 
 nxTypeEq(a: NxType, b: NxType): Bool {
@@ -92,7 +118,7 @@ nxTypeToString(t: NxType): String {
         return "List<" + nxTypeToString(t.elem!) + ">"
     }
     if (t.kind == NXTYPE_MAP) {
-        return "Map<" + nxTypeToString(t.key!) + "," + nxTypeToString(t.val!) + ">"
+        return "Map<" + nxTypeToString(t.key!) + "," + nxTypeToString(t.map_val!) + ">"
     }
     if (t.kind == NXTYPE_NULLABLE) {
         return nxTypeToString(t.elem!) + "?"
@@ -501,11 +527,37 @@ expandProgramImports(prog: Program): Program {
     return Program(items: allItems, parse_errors: allErrors)
 }
 
-class Scope(parent: Scope?, names: List, types: List) {
+class Scope(parent: Scope?, names: List, types: List, immutable_names: List) {
 
-    define(name: String, ty: NxType): Void {
+    define(name: String, ty: NxType, isFinal: Bool): Void {
         this.names.push(name)
         this.types.push(ty)
+        if (isFinal) {
+            this.immutable_names.push(name)
+        }
+    }
+
+    lookupFinal(name: String): Bool {
+        var i = this.names.len() - 1
+        while (i >= 0) {
+            var n: String = this.names.get(i)
+            if (n == name) {
+                var j = 0
+                while (j < this.immutable_names.len()) {
+                    var imm: String = this.immutable_names.get(j)
+                    if (imm == name) {
+                        return true
+                    }
+                    j = j + 1
+                }
+                return false
+            }
+            i = i - 1
+        }
+        if (this.parent != null) {
+            return this.parent!.lookupFinal(name)
+        }
+        return false
     }
 
     lookup(name: String): NxType? {
@@ -526,7 +578,7 @@ class Scope(parent: Scope?, names: List, types: List) {
 }
 
 makeScope(parent: Scope?): Scope {
-    return Scope(parent: parent, names: List(), types: List())
+    return Scope(parent: parent, names: List(), types: List(), immutable_names: List())
 }
 
 lastPathSegment(path: String): String {
@@ -631,7 +683,7 @@ checkItem(ctx: SemaCtx, item: Item): Void {
         while (k < fn.params.len()) {
             var p: Param = fn.params.get(k)
             var pt = ctx.resolveType(p.ty)
-            scope.define(p.name, pt)
+            scope.define(p.name, pt, false)
             k = k + 1
         }
         var returns = checkFnBody(ctx, fn, scope, ret)
@@ -647,19 +699,19 @@ checkItem(ctx: SemaCtx, item: Item): Void {
             var fn2: Function = cd.methods.get(i)
             var ret2 = ctx.resolveType(fn2.return_type)
             var scope2 = makeScope(null)
-            scope2.define("this", makeNxTypeNamed(cd.name))
+            scope2.define("this", makeNxTypeNamed(cd.name), false)
             var k2 = 0
             while (k2 < cd.primary_params.len()) {
                 var pp: FieldDecl = cd.primary_params.get(k2)
                 var pt2 = ctx.resolveType(pp.ty)
-                scope2.define(pp.name, pt2)
+                scope2.define(pp.name, pt2, false)
                 k2 = k2 + 1
             }
             var k3 = 0
             while (k3 < fn2.params.len()) {
                 var p2: Param = fn2.params.get(k3)
                 var pt3 = ctx.resolveType(p2.ty)
-                scope2.define(p2.name, pt3)
+                scope2.define(p2.name, pt3, false)
                 k3 = k3 + 1
             }
             var returns2 = checkFnBody(ctx, fn2, scope2, ret2)
@@ -704,9 +756,9 @@ checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
             if (!ctx.typesCompatible(valTy, declared)) {
                 ctx.addError("tipo incompatible en " + stmt.var_name, stmt.line, stmt.col)
             }
-            scope.define(stmt.var_name, declared)
+            scope.define(stmt.var_name, declared, stmt.is_final)
         } else {
-            scope.define(stmt.var_name, valTy)
+            scope.define(stmt.var_name, valTy, stmt.is_final)
         }
         return false
     }
@@ -751,7 +803,7 @@ checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
             elemTy = iterTy.elem!
         }
         var forScope = makeScope(scope)
-        forScope.define(stmt.for_var, elemTy)
+        forScope.define(stmt.for_var, elemTy, false)
         checkStmts(ctx, stmt.body_stmts, forScope, retTy)
         return false
     }
@@ -776,7 +828,7 @@ checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
     if (stmt.kind == STMT_TRY) {
         checkStmts(ctx, stmt.then_stmts, scope, retTy)
         var catchScope = makeScope(scope)
-        catchScope.define(stmt.for_var, makeNxTypeSimple(NXTYPE_STRING))
+        catchScope.define(stmt.for_var, makeNxTypeSimple(NXTYPE_STRING), false)
         checkStmts(ctx, stmt.else_stmts, catchScope, retTy)
         return false
     }
@@ -784,11 +836,21 @@ checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
         return false
     }
     if (stmt.kind == STMT_EXPR) {
-        if (stmt.expr != null) {
-            inferExpr(ctx, stmt.expr!, scope)
-        }
-        if (stmt.assign_val != null) {
+        if (stmt.assign_val != null && stmt.expr != null) {
+            if (stmt.expr!.kind == EXPR_PATH) {
+                var lhsParts: List = stmt.expr!.path_parts
+                if (lhsParts.len() == 1) {
+                    var lhsName: String = lhsParts.get(0)
+                    if (scope.lookupFinal(lhsName)) {
+                        ctx.addError("no se puede reasignar variable inmutable: " + lhsName, stmt.line, stmt.col)
+                    }
+                }
+            }
             inferExpr(ctx, stmt.assign_val!, scope)
+        } else {
+            if (stmt.expr != null) {
+                inferExpr(ctx, stmt.expr!, scope)
+            }
         }
         return false
     }
@@ -854,6 +916,9 @@ inferExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
             if (lt.kind == NXTYPE_STRING || rt.kind == NXTYPE_STRING) {
                 return makeNxTypeSimple(NXTYPE_STRING)
             }
+            if (lt.kind == NXTYPE_FLOAT || lt.kind == NXTYPE_DOUBLE || rt.kind == NXTYPE_FLOAT || rt.kind == NXTYPE_DOUBLE) {
+                return makeNxTypeSimple(NXTYPE_DOUBLE)
+            }
             return makeNxTypeSimple(NXTYPE_INT)
         }
         return makeNxTypeSimple(NXTYPE_BOOL)
@@ -869,19 +934,11 @@ inferExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
         if (recvTy.kind == NXTYPE_STRING && expr.field_name == "length") {
             return makeNxTypeSimple(NXTYPE_INT)
         }
-        if (recvTy.kind == NXTYPE_NAMED) {
-            var si = ctx.findStruct(recvTy.name)
-            if (si != null) {
-                var k = 0
-                while (k < si!.fields.len()) {
-                    var sf: StructField = si!.fields.get(k)
-                    if (sf.name == expr.field_name) {
-                        if (sf.ty != null) {
-                            return sf.ty!
-                        }
-                    }
-                    k = k + 1
-                }
+        var baseTy = unwrapNullableTy(recvTy)
+        if (baseTy.kind == NXTYPE_NAMED) {
+            var found = lookupStructField(ctx, baseTy.name, expr.field_name)
+            if (found != null) {
+                return found!
             }
         }
         return nxTypeUnknown()
@@ -902,7 +959,13 @@ inferExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
     }
     if (expr.kind == EXPR_ELVIS) {
         var leftTy = inferExpr(ctx, expr.left!, scope)
-        inferExpr(ctx, expr.right!, scope)
+        var rightTy = inferExpr(ctx, expr.right!, scope)
+        if (leftTy.kind == NXTYPE_NULLABLE && leftTy.elem != null) {
+            return leftTy.elem!
+        }
+        if (rightTy.kind == NXTYPE_NULLABLE && rightTy.elem != null) {
+            return rightTy.elem!
+        }
         return leftTy
     }
     if (expr.kind == EXPR_LIST) {
@@ -947,8 +1010,8 @@ inferCallExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
     var i = 0
     while (i < expr.args.len()) {
         var arg: CallArg = expr.args.get(i)
-        if (arg.val != null) {
-            inferExpr(ctx, arg.val!, scope)
+        if (arg.expr != null) {
+            inferExpr(ctx, arg.expr!, scope)
         }
         i = i + 1
     }
@@ -971,12 +1034,13 @@ inferCallExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
             name == "nx_read_header_line" || name == "nx_read_stdin_n" ||
             name == "nx_run_capture" || name == "nx_run_binary_capture" ||
             name == "nx_tcp_read_line" || name == "nx_tcp_read" ||
+            name == "nx_tls_read_line" || name == "nx_tls_read" ||
             name == "nx_fread_n" || name == "nx_getenv") {
             return makeNxTypeSimple(NXTYPE_STRING)
         }
         if (name == "nx_get_arg_count" || name == "nx_tcp_listen" || name == "nx_tcp_accept" ||
             name == "nx_write_stdout_n" || name == "nx_stat_size" || name == "nx_fopen" ||
-            name == "nx_time_now" || name == "nx_tcp_connect") {
+            name == "nx_time_now" || name == "nx_tcp_connect" || name == "nx_tls_connect") {
             return makeNxTypeSimple(NXTYPE_INT)
         }
         if (name == "nx_string_ends_with" || name == "nx_string_lt" ||
@@ -1024,15 +1088,16 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
         }
     }
     var recvTy = inferExpr(ctx, expr.receiver!, scope)
+    var effectiveRecv = unwrapNullableTy(recvTy)
     var i = 0
     while (i < expr.args.len()) {
         var arg: CallArg = expr.args.get(i)
-        if (arg.val != null) {
-            inferExpr(ctx, arg.val!, scope)
+        if (arg.expr != null) {
+            inferExpr(ctx, arg.expr!, scope)
         }
         i = i + 1
     }
-    if (recvTy.kind == NXTYPE_STRING) {
+    if (effectiveRecv.kind == NXTYPE_STRING) {
         var m = expr.method_name
         if (m == "length" || m == "toInt") {
             return makeNxTypeSimple(NXTYPE_INT)
@@ -1045,20 +1110,20 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
         }
         return makeNxTypeSimple(NXTYPE_STRING)
     }
-    if (recvTy.kind == NXTYPE_LIST) {
+    if (effectiveRecv.kind == NXTYPE_LIST) {
         var m2 = expr.method_name
         if (m2 == "len" || m2 == "size") {
             return makeNxTypeSimple(NXTYPE_INT)
         }
-        if (m2 == "get" && recvTy.elem != null) {
-            return recvTy.elem!
+        if (m2 == "get" && effectiveRecv.elem != null) {
+            return effectiveRecv.elem!
         }
         if (m2 == "isEmpty") {
             return makeNxTypeSimple(NXTYPE_BOOL)
         }
         return nxTypeUnknown()
     }
-    if (recvTy.kind == NXTYPE_MAP) {
+    if (effectiveRecv.kind == NXTYPE_MAP) {
         var m3 = expr.method_name
         if (m3 == "len" || m3 == "size") {
             return makeNxTypeSimple(NXTYPE_INT)
@@ -1067,17 +1132,17 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
             return makeNxTypeSimple(NXTYPE_BOOL)
         }
         if (m3 == "get" || m3 == "getInt") {
-            if (recvTy.val != null) {
-                return recvTy.val!
+            if (effectiveRecv.map_val != null) {
+                return effectiveRecv.map_val!
             }
         }
         return nxTypeUnknown()
     }
-    if (recvTy.kind == NXTYPE_INT || recvTy.kind == NXTYPE_LONG || recvTy.kind == NXTYPE_BOOL || recvTy.kind == NXTYPE_CHAR) {
+    if (effectiveRecv.kind == NXTYPE_INT || effectiveRecv.kind == NXTYPE_LONG || effectiveRecv.kind == NXTYPE_BOOL || effectiveRecv.kind == NXTYPE_CHAR || effectiveRecv.kind == NXTYPE_FLOAT || effectiveRecv.kind == NXTYPE_DOUBLE) {
         return makeNxTypeSimple(NXTYPE_STRING)
     }
-    if (recvTy.kind == NXTYPE_NAMED) {
-        var fi = ctx.findMethod(recvTy.name, expr.method_name)
+    if (effectiveRecv.kind == NXTYPE_NAMED) {
+        var fi = ctx.findMethod(effectiveRecv.name, expr.method_name)
         if (fi != null) {
             if (fi!.return_type != null) {
                 return fi!.return_type!

@@ -3,6 +3,7 @@ import std.io
 data Punto {
     x: Int
     y: Int
+    label: String?
 }
 
 class PuntoService {
@@ -16,8 +17,11 @@ areaAproximada(radio: Int): Int {
 }
 
 main(): Void {
-    var p = Punto(x: 3, y: 4)
-    var svc = PuntoService()
-    io.println(svc.distanciaOrigenCuadrado(p))
+    val origen = Punto(x: 3, y: 4, label: null)
+    val marcado = Punto(x: 1, y: 1, label: "A")
+    val svc = PuntoService()
+    io.println(svc.distanciaOrigenCuadrado(origen))
     io.println(areaAproximada(5))
+    io.println(origen.label ?: "sin etiqueta")
+    io.println(marcado.label ?: "sin etiqueta")
 }

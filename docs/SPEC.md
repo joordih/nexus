@@ -121,7 +121,7 @@ var nombre = "Nexus"
 final pi: Double = 3.14159
 ```
 
-`var` declara una variable mutable. `final` declara una constante local.
+`var` declara una variable mutable. `val` y `final` declaran constantes locales inmutables.
 
 ## Control de flujo
 

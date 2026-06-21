@@ -1,0 +1,10 @@
+import std.io
+
+data User {
+    email: String?
+}
+
+main(): Void {
+    final u = User(email: null)
+    io.println(u.email ?: "sin email")
+}
