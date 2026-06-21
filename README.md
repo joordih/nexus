@@ -31,7 +31,7 @@ Nullability is part of the type system. A non-nullable type can never hold `null
 
 ### Native compilation, no VM
 
-The compiler emits C, which is compiled to a native binary with `clang` (configurable via `CC`). The runtime is a small C library providing `List`, `Map`, string operations, and I/O, with garbage collection based on the [Boehm GC](https://www.hboehm.info/gc/).
+The compiler emits C, which is compiled to a native binary with `clang` (configurable via `CC`). The runtime is a small C library providing `List`, `Map`, string operations, I/O, and TLS client primitives (OpenSSL), with garbage collection based on the [Boehm GC](https://www.hboehm.info/gc/).
 
 ### Verified self-hosting
 
@@ -84,7 +84,7 @@ main(): Void {
     users.add(User(name: "Ada", email: "ada@example.com"))
     users.add(User(name: "Grace", email: null))
 
-    var service = UserService()
+    val service = UserService()
     for user in users {
         io.println(service.describe(user))
     }
@@ -103,15 +103,18 @@ Grace (no email on file)
 </tr>
 </table>
 
+For HTTPS and the `fetch` API, see `examples/zenserp_search.nx`.
+
 ## Current status
 
 Self-hosting is complete (phases 0–6 of the bootstrap plan are closed). The subset of the language the compiler is written in is called **Nexus Core**.
 
 Implemented end to end (semantic analysis and code generation):
 
-* `import`, free functions, `data`, `value`, `class`, local and global variables
+* `import`, free functions, `data`, `value`, `class`, `var`/`val`/`final` variables
 * `List<T>`, `Map<K,V>`, null safety (`T?`, `?.`, `?:`, `!`)
 * `if`/`else`, `while`, `for...in`, `switch`, `try`/`catch`/`throw`, lambdas, named constructor arguments
+* `Float` and `Double` arithmetic and `toString`
 
 Parsed but not yet processed by semantic analysis or codegen (reserved syntax for later phases):
 
@@ -119,7 +122,7 @@ Parsed but not yet processed by semantic analysis or codegen (reserved syntax fo
 
 Primitive types: `Int` (64-bit signed), `Long`, `Float` (32-bit), `Double` (64-bit), `Bool`, `Char`, `String`, `Void`.
 
-Planned extensions (generics, borrow checker, concurrency, async) are tracked in `docs/PLAN.md`.
+Planned compiler extensions are tracked in `plans/README.md` (phases 000–017). High-level architecture and long-term goals are in `docs/PLAN.md`.
 
 ## Standard library
 
@@ -131,7 +134,7 @@ The standard library lives in `nx/std/` and is written in Nexus. Current modules
 | `std.collections` | `array_list`, `hash_set`, `linked_hash_map`, `linked_hash_set`, `tree_map`, `tree_set`, `queue`, `stack`, `optional` |
 | `std.json` | `parser`, `writer`, `value`, `access` (`json.parse`, `json.stringify`) |
 | `std.fs` | `file`, `files`, `path`, `directory_stream`, `file_input_stream`, `file_output_stream` |
-| `std.network` | `socket`, `server_socket`, `http_client` |
+| `std.network` | `socket` (`connectTlsSocket`), `server_socket`, `http_client`, `fetch`, `url` (`URLSearchParams`, `parseUrl`) |
 | `std.datetime` | `local_date`, `local_time`, `local_date_time`, `duration`, `period` |
 | `std.regex` | `pattern`, `matcher` |
 | `std.system` | `environment`, `runtime_info` |
@@ -159,7 +162,7 @@ Requirements:
 * [Boehm GC](https://www.hboehm.info/gc/) (`libgc`)
 * OpenSSL (`libssl`/`libcrypto`)
 * `make`
-* Python — only for `make verify-bootstrap` and the LSP test suite
+* Python 3 — `scripts/write_link_config.py`, `make verify-bootstrap`, LSP tests, and Makefile helpers
 * Node.js / `npm` — only for packaging the VS Code extension
 
 Environment variables for linking:
@@ -178,6 +181,7 @@ Running `make bootstrap`, `make stage2`, or `make test` executes `scripts/write_
 Main targets:
 
 ```
+make link-config       # auto-detect OpenSSL/GC paths -> runtime/nexus_link_config.h
 make bootstrap         # build the stage 0 compiler (Rust) -> build/nxc-stage0
 make stage1            # stage 0 compiles the Nexus compiler -> build/nxc-stage1
 make stage2            # stage 1 compiles itself            -> build/nxc-stage2
@@ -187,8 +191,12 @@ make test              # all suites: runtime, lexer, parser, sema, codegen,
                        #             e2e, json, stdlib, lsp
 make nexus-lsp         # build the language server -> build/nexus-lsp
 make vscode-nexus      # package the VS Code extension
+make install           # copy build/nxc-stage2 to NXC_INSTALL_DIR (default ~/bin)
+make check-examples    # compile examples/hello and examples/stdlib_showcase
 make build-all         # verify-bootstrap + vscode-nexus + test
 ```
+
+CI (`.github/workflows/ci.yml`) runs `make test` and `make verify-bootstrap` on Ubuntu.
 
 ## Using the compiler
 
@@ -208,12 +216,15 @@ make example NAME=hello
 ## Repository structure
 
 ```
+.github/        CI workflows
 bootstrap/      Stage 0 compiler in Rust (nxc-stage0)
 compiler/       Self-hosted compiler in Nexus (nxc-stage1+)
 nx/             Nexus source outside the compiler: std/ (stdlib), lsp/ (language server)
-runtime/        C runtime (GC, List, Map, io)
+runtime/        C runtime (GC, List, Map, io, TLS)
+scripts/        Build helpers (link-config auto-detection)
 tests/          Test suites with expected snapshots
 examples/       Example programs
+plans/          Compiler implementation roadmap (phases 000–017)
 docs/           Spec, grammar, roadmap, notes
 vscode-nexus/   VS Code extension
 ```
@@ -224,5 +235,6 @@ All language documentation is currently written in Spanish.
 
 * `docs/SPEC.md` — language specification of Nexus Core; documents only what the compiler implements today
 * `docs/GRAMMAR.md` — the authoritative formal grammar
-* `docs/PLAN.md` — architecture and roadmap
+* `plans/README.md` — phased compiler roadmap (current work tracker)
+* `docs/PLAN.md` — architecture and long-term goals
 * `docs/NOTES.md` — development log of the bootstrap phases
