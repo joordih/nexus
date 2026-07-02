@@ -548,7 +548,13 @@ pub fn compile_dir(dir: &str, output: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     cmd.args(&["-Xlinker", "/subsystem:console", "-Wl,/Brepro"]);
     #[cfg(not(target_os = "windows"))]
-    cmd.args(&["-Wl,--build-id=none", "-Wl,--hash-style=gnu", "-frandom-seed=nexus"]);
+    cmd.args(&[
+        "-Wl,--build-id=none",
+        "-Wl,--hash-style=gnu",
+        "-frandom-seed=nexus",
+        "-fno-record-gcc-switches",
+        "-fno-ident",
+    ]);
     let status = cmd.status()
         .map_err(|e| format!("no se pudo ejecutar {}: {}", clang, e))?;
 
@@ -603,7 +609,13 @@ pub fn compile_file(nx_path: &str, output: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     cmd.args(&["-Xlinker", "/subsystem:console", "-Wl,/Brepro"]);
     #[cfg(not(target_os = "windows"))]
-    cmd.args(&["-Wl,--build-id=none", "-Wl,--hash-style=gnu", "-frandom-seed=nexus"]);
+    cmd.args(&[
+        "-Wl,--build-id=none",
+        "-Wl,--hash-style=gnu",
+        "-frandom-seed=nexus",
+        "-fno-record-gcc-switches",
+        "-fno-ident",
+    ]);
     let status = cmd.status()
         .map_err(|e| format!("no se pudo ejecutar {}: {}", clang, e))?;
 

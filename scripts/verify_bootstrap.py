@@ -1,12 +1,19 @@
 import hashlib
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
+
+
+def resolve_bin(path):
+    if os.path.exists(path + ".exe"):
+        return path + ".exe"
+    return path
 
 
 def read_bytes(path):
-    if os.path.exists(path + ".exe"):
-        path = path + ".exe"
-    with open(path, "rb") as f:
+    with open(resolve_bin(path), "rb") as f:
         return f.read()
 
 
@@ -18,6 +25,31 @@ def first_diff(a, b):
     if len(a) != len(b):
         return limit
     return -1
+
+
+def strip_elf_notes(path):
+    objcopy = shutil.which("objcopy")
+    if objcopy is None:
+        return read_bytes(path)
+    src = resolve_bin(path)
+    fd, tmp = tempfile.mkstemp(suffix=".elf")
+    os.close(fd)
+    try:
+        shutil.copy2(src, tmp)
+        subprocess.run(
+            [
+                objcopy,
+                "--remove-section=.note.gnu.build-id",
+                "--remove-section=.comment",
+                tmp,
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return read_bytes(tmp)
+    finally:
+        os.remove(tmp)
 
 
 def main():
@@ -44,6 +76,10 @@ def main():
 
     b2 = read_bytes("build/nxc-stage2")
     b3 = read_bytes("build/nxc-stage3")
+    if b2 != b3:
+        b2 = strip_elf_notes("build/nxc-stage2")
+        b3 = strip_elf_notes("build/nxc-stage3")
+
     if b2 != b3:
         idx = first_diff(b2, b3)
         print(
