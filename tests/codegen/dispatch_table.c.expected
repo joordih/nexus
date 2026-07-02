@@ -1,0 +1,24 @@
+#include "nexus_runtime.h"
+
+void nx_fn_main();
+
+void nx_fn_main() {
+    NxString s = "hola";
+    NxInt n = nx_string_len(s);
+    NxChar c = nx_string_char_at(s, ((NxInt)0LL));
+    NxBool b = nx_string_ends_with(s, "la");
+    NxInt i = ((NxInt)42LL);
+    NxString si = nx_int_to_string(i);
+    NxBool v = NX_TRUE;
+    NxString sv = nx_bool_to_string(v);
+    NxChar ch = ((NxChar)'x');
+    NxString sc = nx_char_to_string(ch);
+}
+
+int main(int argc, char** argv) {
+    nexus_init();
+    nexus_set_args(argc, argv);
+    nx_fn_main();
+    return 0;
+}
+

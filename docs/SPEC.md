@@ -11,6 +11,10 @@ La gramática formal está en `GRAMMAR.md`. La hoja de ruta de ampliaciones futu
 | `import`, funciones, `data`, `value`, `class`, variables locales y globales | Sema y codegen completos |
 | `List<T>`, `Map<K,V>`, null safety (`T?`, `?.`, `?:`, `!`) | Sema y codegen completos |
 | `if`/`else`, `while`, `for...in`, `switch`, lambdas, argumentos nombrados | Sema y codegen completos |
+| Strings raw `r"..."` y multilínea `"""..."""` (dedent) | Lexer completo: producen literales `String` normales |
+| Imports con alias (`as`), agrupados (`{a, b}`) y wildcard (`.*`) | Sema y codegen completos |
+| Extensiones `fun Tipo.metodo(...)` y `toString` en todos los primitivos | Sema y codegen completos; dispatch por tabla central |
+| Smart casts: tras `if (x != null)`, `x == null` con return, `&&` y `while`, las variables locales nullable se usan sin `!`; la reasignación invalida el estrechado | Solo sema; el acceso a un local nullable sin estrechar es error |
 | `module`, `interface`, `annotation`, `extends`, `implements`, parámetros de tipo `<T>` | Solo parser: la sintaxis es válida pero sema y codegen aún no las procesan |
 
 Solo se documentan aquí las características de la primera tabla. El resto aparece en `GRAMMAR.md` como sintaxis reservada para fases posteriores.
@@ -51,6 +55,12 @@ Rutas con punto se resuelven a ficheros `.nx`:
 
 - `std.json.value` -> `nx/std/json/value.nx`
 - `compiler.ast` -> `compiler/src/ast.nx`
+
+Formas adicionales de import:
+
+- `import compiler.ast as arbol` registra el módulo con el alias `arbol`.
+- `import std.core.{math, strings}` equivale a un import por miembro; cada miembro admite su propio `as`.
+- `import std.core.*` importa cada fichero `.nx` del directorio en orden alfabético. Si un wildcard aporta un nombre de módulo ya ligado a otra ruta distinta, sema emite error.
 - `lsp.features.hover` -> `nx/lsp/features/hover.nx`
 
 Código Nexus fuera del compilador vive en `nx/`: `nx/std/` (stdlib) y `nx/lsp/` (servidor LSP).

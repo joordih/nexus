@@ -1,0 +1,5 @@
+var
+Ident(s)
+=
+String("a\tb")
+EOF

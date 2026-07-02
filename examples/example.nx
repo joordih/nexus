@@ -1,27 +1,73 @@
 import std.io
+import std.core.{math, strings}
 
-data Punto {
+fun String.shout(): String {
+    return this + "!"
+}
+
+fun Int.squared(): Int {
+    return this * this
+}
+
+lengthOrZero(text: String?): Int {
+    if (text == null) {
+        return 0
+    }
+    return text.length()
+}
+
+hasText(text: String?): Bool {
+    return text != null && text.length() > 0
+}
+
+labelOrDefault(label: String?): String {
+    return label ?: "no label"
+}
+
+data Point {
     x: Int
     y: Int
     label: String?
 }
 
-class PuntoService {
-    distanciaOrigenCuadrado(p: Punto): Int {
-        return p.x * p.x + p.y * p.y
+class PointService {
+    squaredDistanceFromOrigin(point: Point): Int {
+        return point.x.squared() + point.y.squared()
     }
 }
 
-areaAproximada(radio: Int): Int {
-    return 3 * radio * radio
+demoNullSafety(origin: Point, marked: Point): Void {
+    io.println(labelOrDefault(origin.label))
+    io.println(labelOrDefault(marked.label))
+    io.println(lengthOrZero(marked.label))
+    io.println(hasText(marked.label).toString())
+    io.println(marked.label?.length())
+}
+
+demoStrings(): Void {
+    val rawPath = r"C:\nexus\examples\raw"
+    io.println(rawPath)
+    val block = """
+        hello
+          world
+        """
+    io.println(strings.trimString(block))
+}
+
+demoExtensions(): Void {
+    io.println(math.maxInt(10, 20))
+    io.println("nexus".shout())
+    val ratio = 3.0 / 2.0
+    io.println(ratio.toString())
 }
 
 main(): Void {
-    val origen = Punto(x: 3, y: 4, label: null)
-    val marcado = Punto(x: 1, y: 1, label: "A")
-    val svc = PuntoService()
-    io.println(svc.distanciaOrigenCuadrado(origen))
-    io.println(areaAproximada(5))
-    io.println(origen.label ?: "sin etiqueta")
-    io.println(marcado.label ?: "sin etiqueta")
+    val origin = Point(x: 3, y: 4, label: null)
+    val marked = Point(x: 1, y: 1, label: "A")
+    val service = PointService()
+
+    io.println(service.squaredDistanceFromOrigin(origin))
+    demoNullSafety(origin, marked)
+    demoStrings()
+    demoExtensions()
 }

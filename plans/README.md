@@ -12,11 +12,11 @@ Cada archivo `NNN-*.md` es un plan **autocontenido** para un ejecutor sin contex
 | 001 | Fase 1 — Nullable `?.` `?:` `!` | P0 | M | 000 | DONE |
 | 002 | Fase 2 — `val` e inmutabilidad | P0 | M | 001 | DONE |
 | 003 | Fase 3 — Float/Double aritmética | P0 | M | 002 | DONE |
-| 004 | Fase 4 — Strings raw y multilínea | P1 | S | 003 | TODO |
-| 005 | Fase 5 — Imports alias/grupo/wildcard | P1 | M | 003 | TODO |
-| 006 | Fase 6 — Dispatch y extensiones | P1 | L | 003 | TODO |
+| 004 | Fase 4 — Strings raw y multilínea | P1 | S | 003 | DONE |
+| 005 | Fase 5 — Imports alias/grupo/wildcard | P1 | M | 003 | DONE |
+| 006 | Fase 6 — Dispatch y extensiones | P1 | L | 003 | DONE |
 | 007 | Fase 7 — Interpolación de strings | P2 | L | 004, 006 | TODO |
-| 008 | Fase 8 — Smart casts / flow typing | P2 | M | 001 | TODO |
+| 008 | Fase 8 — Smart casts / flow typing | P2 | M | 001 | DONE |
 | 009 | Fase 9 — `if`/`switch`/`try` expresión | P2 | L | 003 | TODO |
 | 010 | Fase 10 — `?[]` y subscript assign | P2 | M | 001, 009 | TODO |
 | 011 | Fase 11 — JSON v1 capstone | P0 | L | 001, 006, 008, 010 | TODO |

@@ -4,12 +4,16 @@
   "scopeName": "source.nexus",
   "patterns": [
     { "include": "#comments" },
+    { "include": "#raw-strings" },
+    { "include": "#multiline-strings" },
     { "include": "#strings" },
     { "include": "#char-literals" },
+    { "include": "#imports" },
     { "include": "#keywords" },
     { "include": "#builtin-types" },
     { "include": "#constants" },
     { "include": "#numbers" },
+    { "include": "#extension-definition" },
     { "include": "#function-definition" },
     { "include": "#class-definition" },
     { "include": "#method-call" },
@@ -28,16 +32,30 @@
           "begin": "/\\*",
           "end": "\\*/",
           "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.nexus" } },
-          "endCaptures":   { "0": { "name": "punctuation.definition.comment.end.nexus" } }
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.nexus" } }
         }
       ]
+    },
+    "raw-strings": {
+      "name": "string.quoted.double.raw.nexus",
+      "begin": "r\"",
+      "end": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.nexus" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.nexus" } }
+    },
+    "multiline-strings": {
+      "name": "string.quoted.triple.nexus",
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.nexus" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.nexus" } }
     },
     "strings": {
       "name": "string.quoted.double.nexus",
       "begin": "\"",
       "end": "\"",
       "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.nexus" } },
-      "endCaptures":   { "0": { "name": "punctuation.definition.string.end.nexus" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.nexus" } },
       "patterns": [
         {
           "name": "constant.character.escape.nexus",
@@ -52,6 +70,30 @@
         "0": { "name": "string.quoted.single.nexus" }
       }
     },
+    "imports": {
+      "name": "meta.import.nexus",
+      "begin": "\\bimport\\b",
+      "beginCaptures": { "0": { "name": "keyword.other.import.nexus" } },
+      "end": "(?=;|$)",
+      "patterns": [
+        {
+          "name": "keyword.other.import.alias.nexus",
+          "match": "\\bas\\b"
+        },
+        {
+          "name": "keyword.other.import.wildcard.nexus",
+          "match": "\\.\\*"
+        },
+        {
+          "name": "punctuation.separator.import.group.nexus",
+          "match": "[{}]"
+        },
+        {
+          "name": "entity.name.namespace.nexus",
+          "match": "[a-zA-Z_][a-zA-Z0-9_.]*"
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
         {
@@ -60,7 +102,7 @@
         },
         {
           "name": "keyword.declaration.nexus",
-          "match": "\\b(var|val|final|class|data|value|interface|annotation)\\b"
+          "match": "\\b(var|val|final|fun|class|data|value|interface|annotation)\\b"
         },
         {
           "name": "keyword.other.nexus",
@@ -96,9 +138,16 @@
         }
       ]
     },
+    "extension-definition": {
+      "match": "^\\s*fun\\s+([A-Z][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.type.nexus" },
+        "2": { "name": "entity.name.function.nexus" }
+      }
+    },
     "function-definition": {
-      "comment": "Matches: name(  or  name<T>(  at start of statement — function/method definition",
-      "match": "^\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "comment": "Top-level function: name( at statement start, not fun Type.method(",
+      "match": "^\\s*(?!(?:fun\\s+[A-Z][a-zA-Z0-9_]*\\.))([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
       "captures": {
         "1": { "name": "entity.name.function.nexus" }
       }

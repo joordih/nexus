@@ -1,0 +1,14 @@
+import std.io
+
+main(): Void {
+    var i = 42
+    io.println(i.toString())
+    var b = true
+    io.println(b.toString())
+    var c = 'x'
+    io.println(c.toString())
+    var d = 1.5
+    io.println(d.toString())
+    var s = "nexus"
+    io.println(s.endsWith("us").toString())
+}

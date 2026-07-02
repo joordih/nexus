@@ -1,45 +1,73 @@
 import std.io
-import std.json
 import std.json.access
-import std.network.url
-import std.network.fetch
+import std.json.value
+import std.network.{fetch, url}
 import std.system.environment
 
 final ZENSERP_SEARCH_URL: String = "https://app.zenserp.com/api/v2/search"
+final MISSING_API_KEY_MESSAGE: String = "Set ZENSERP_API_KEY"
+final REQUEST_FAILED_MESSAGE: String = "Request failed"
 
-main(): Void {
+requireApiKey(): String? {
     val apiKey = getEnv("ZENSERP_API_KEY")
     if (nx_string_len(apiKey) == 0) {
-        io.println("Define ZENSERP_API_KEY")
+        io.println(MISSING_API_KEY_MESSAGE)
+        return null
+    }
+    return apiKey
+}
+
+buildSearchUrl(apiKey: String, query: String): String {
+    val params = URLSearchParams(order: List(), entries: Map())
+    params.append("q", query)
+    params.append("apikey", apiKey)
+    return ZENSERP_SEARCH_URL + "?" + params.toString()
+}
+
+printQueryField(data: JSONValue): Void {
+    val query = jsonGetField(data, "query")
+    if (query == null) {
         return
     }
+    io.println("Query: " + jsonGetString(query!, "q"))
+}
 
-    val params = URLSearchParams(order: List(), entries: Map())
-    params.append("q", "que dia es hoy")
-    params.append("apikey", apiKey)
+printTopOrganicResult(data: JSONValue): Void {
+    val organic = jsonGetField(data, "organic")
+    if (organic == null || jsonArrayLen(organic!) == 0) {
+        return
+    }
+    val first = jsonArrayGet(organic!, 0)
+    if (first == null) {
+        return
+    }
+    io.println("Top: " + jsonGetString(first!, "title"))
+}
 
-    val url = ZENSERP_SEARCH_URL + "?" + params.toString()
-    io.println("GET " + url)
+printSearchResults(data: JSONValue): Void {
+    printQueryField(data)
+    io.println("Results: " + jsonGetInt(data, "number_of_results"))
+    printTopOrganicResult(data)
+}
 
+runSearch(searchUrl: String): Void {
     try {
-        val response = fetch(url)
+        val response = fetch(searchUrl)
         if (!response.ok) {
             throw
         }
-        val data = response.json()
-        val queryObj = jsonGetField(data, "query")
-        if (queryObj != null) {
-            io.println("Query: " + jsonGetString(queryObj!, "q"))
-        }
-        io.println("Results: " + jsonGetInt(data, "number_of_results"))
-        val organic = jsonGetField(data, "organic")
-        if (organic != null && jsonArrayLen(organic!) > 0) {
-            val first = jsonArrayGet(organic!, 0)
-            if (first != null) {
-                io.println("Top: " + jsonGetString(first!, "title"))
-            }
-        }
+        printSearchResults(response.json())
     } catch (err) {
-        io.println("Error")
+        io.println(REQUEST_FAILED_MESSAGE)
     }
+}
+
+main(): Void {
+    val apiKey = requireApiKey()
+    if (apiKey == null) {
+        return
+    }
+    val searchUrl = buildSearchUrl(apiKey, "que dia es hoy")
+    io.println("GET " + searchUrl)
+    runSearch(searchUrl)
 }

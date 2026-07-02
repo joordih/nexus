@@ -9,6 +9,7 @@ final ITEM_INTERFACE: Int = 15
 final ITEM_ANNOTATION: Int = 16
 final ITEM_FUNCTION: Int = 17
 final ITEM_GLOBAL: Int = 18
+final ITEM_EXTENSION: Int = 19
 
 final EXPR_INT: Int = 30
 final EXPR_FLOAT: Int = 31
@@ -124,6 +125,7 @@ data SwitchArm {
 data Function {
     annotations: List
     name: String
+    receiver_type: String
     params: List
     return_type: String
     is_block_body: Bool
@@ -172,6 +174,8 @@ data Item {
     kind: Int
     module_path: String
     import_path: String
+    import_alias: String
+    import_wildcard: Bool
     class_decl: ClassDecl?
     data_decl: DataDecl?
     interface_decl: InterfaceDecl?

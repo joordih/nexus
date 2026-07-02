@@ -143,6 +143,41 @@ data FnInfo {
     return_type: NxType?
 }
 
+data DispatchEntry {
+    recv_name: String
+    method_name: String
+    ret: NxType
+}
+
+addDispatch(entries: List, recvName: String, methodName: String, ret: NxType): Void {
+    entries.push(DispatchEntry(recv_name: recvName, method_name: methodName, ret: ret))
+}
+
+buildBuiltinDispatch(): List {
+    var entries: List = List()
+    addDispatch(entries, "String", "length", makeNxTypeSimple(NXTYPE_INT))
+    addDispatch(entries, "String", "toInt", makeNxTypeSimple(NXTYPE_INT))
+    addDispatch(entries, "String", "charAt", makeNxTypeSimple(NXTYPE_CHAR))
+    addDispatch(entries, "String", "equals", makeNxTypeSimple(NXTYPE_BOOL))
+    addDispatch(entries, "String", "startsWith", makeNxTypeSimple(NXTYPE_BOOL))
+    addDispatch(entries, "String", "endsWith", makeNxTypeSimple(NXTYPE_BOOL))
+    addDispatch(entries, "String", "contains", makeNxTypeSimple(NXTYPE_BOOL))
+    addDispatch(entries, "Int", "toString", makeNxTypeSimple(NXTYPE_STRING))
+    addDispatch(entries, "Long", "toString", makeNxTypeSimple(NXTYPE_STRING))
+    addDispatch(entries, "Float", "toString", makeNxTypeSimple(NXTYPE_STRING))
+    addDispatch(entries, "Double", "toString", makeNxTypeSimple(NXTYPE_STRING))
+    addDispatch(entries, "Bool", "toString", makeNxTypeSimple(NXTYPE_STRING))
+    addDispatch(entries, "Char", "toString", makeNxTypeSimple(NXTYPE_STRING))
+    return entries
+}
+
+extensionReturnType(fi: FnInfo): NxType {
+    if (fi.return_type != null) {
+        return fi.return_type!
+    }
+    return nxTypeUnknown()
+}
+
 data SemaError {
     msg: String
     line: Int
@@ -161,9 +196,46 @@ class SemaCtx(
     global_names: List,
     global_types: List,
     import_names: List,
+    import_paths: List,
     collected_imports: List,
+    dispatch_entries: List,
+    ext_recv_names: List,
+    ext_fn_infos: List,
     errors: List
 ) {
+
+    findDispatch(recvName: String, methodName: String): NxType? {
+        var i = 0
+        while (i < this.dispatch_entries.len()) {
+            var de: DispatchEntry = this.dispatch_entries.get(i)
+            if (de.recv_name == recvName && de.method_name == methodName) {
+                return de.ret
+            }
+            i = i + 1
+        }
+        return null
+    }
+
+    findExtension(recvName: String, methodName: String): FnInfo? {
+        var i = 0
+        while (i < this.ext_recv_names.len()) {
+            var rn: String = this.ext_recv_names.get(i)
+            var fi: FnInfo = this.ext_fn_infos.get(i)
+            if (rn == recvName && fi.name == methodName) {
+                return fi
+            }
+            i = i + 1
+        }
+        return null
+    }
+
+    addExtension(recvName: String, fi: FnInfo): Void {
+        if (this.findExtension(recvName, fi.name) != null) {
+            return
+        }
+        this.ext_recv_names.push(recvName)
+        this.ext_fn_infos.push(fi)
+    }
 
     addError(msg: String, line: Int, col: Int): Void {
         var err = SemaError(msg: msg, line: line, col: col)
@@ -273,8 +345,22 @@ class SemaCtx(
         return false
     }
 
-    addImport(name: String): Void {
+    addImport(name: String, path: String): Void {
         this.import_names.push(name)
+        this.import_paths.push(path)
+    }
+
+    importPathFor(name: String): String {
+        var i = 0
+        while (i < this.import_names.len()) {
+            var n: String = this.import_names.get(i)
+            if (n == name) {
+                var p: String = this.import_paths.get(i)
+                return p
+            }
+            i = i + 1
+        }
+        return ""
     }
 
     hasCollectedImport(path: String): Bool {
@@ -378,7 +464,9 @@ makeSemaCtx(): SemaCtx {
         fn_names: List(), fn_infos: List(), fn_modules: List(),
         method_class_names: List(), method_fn_names: List(), method_fn_infos: List(),
         global_names: List(), global_types: List(),
-        import_names: List(), collected_imports: List(), errors: List()
+        import_names: List(), import_paths: List(), collected_imports: List(),
+        dispatch_entries: buildBuiltinDispatch(), ext_recv_names: List(), ext_fn_infos: List(),
+        errors: List()
     )
 }
 
@@ -395,6 +483,46 @@ dotsToSlashes(s: String): String {
         i = i + 1
     }
     return out
+}
+
+importPathToDir(path: String): String {
+    if (path == "std") {
+        return "nx/std"
+    }
+    if (path == "compiler") {
+        return "compiler/src"
+    }
+    if (path == "lsp") {
+        return "nx/lsp"
+    }
+    if (path.startsWith("std.")) {
+        return "nx/std/" + dotsToSlashes(path.substring(4, path.length()))
+    }
+    if (path.startsWith("compiler.")) {
+        return "compiler/src/" + path.substring(9, path.length())
+    }
+    if (path.startsWith("lsp.")) {
+        return "nx/lsp/" + dotsToSlashes(path.substring(4, path.length()))
+    }
+    return ""
+}
+
+wildcardChildModules(basePath: String): List {
+    var names: List = List()
+    var dir = importPathToDir(basePath)
+    if (dir == "") {
+        return names
+    }
+    var listing: List = nx_list_dir(dir)
+    var i = 0
+    while (i < listing.len()) {
+        var name: String = listing.get(i)
+        if (name.endsWith(".nx")) {
+            names.push(name.substring(0, name.length() - 3))
+        }
+        i = i + 1
+    }
+    return sortList(names)
 }
 
 importPathToFile(path: String): String {
@@ -488,6 +616,21 @@ appendParseErrorsFrom(allErrors: List, prog: Program): Void {
     }
 }
 
+expandImportPath(allItems: List, allErrors: List, collected: List, importPath: String): Bool {
+    if (hasCollectedPath(collected, importPath)) {
+        return false
+    }
+    markCollectedPath(collected, importPath)
+    var filePath = importPathToFile(importPath)
+    if (filePath == "") {
+        return false
+    }
+    var modProg = parseModuleFile(filePath)
+    appendModuleItems(allItems, modProg)
+    appendParseErrorsFrom(allErrors, modProg)
+    return true
+}
+
 expandProgramImports(prog: Program): Program {
     var allItems: List = List()
     var allErrors: List = List()
@@ -510,13 +653,18 @@ expandProgramImports(prog: Program): Program {
             var item: Item = allItems.get(j)
             if (item.kind == ITEM_IMPORT) {
                 var importPath = item.import_path
-                if (!hasCollectedPath(collected, importPath)) {
-                    markCollectedPath(collected, importPath)
-                    var filePath = importPathToFile(importPath)
-                    if (filePath != "") {
-                        var modProg = parseModuleFile(filePath)
-                        appendModuleItems(allItems, modProg)
-                        appendParseErrorsFrom(allErrors, modProg)
+                if (item.import_wildcard) {
+                    var children: List = wildcardChildModules(importPath)
+                    var c = 0
+                    while (c < children.len()) {
+                        var childName: String = children.get(c)
+                        if (expandImportPath(allItems, allErrors, collected, importPath + "." + childName)) {
+                            changed = true
+                        }
+                        c = c + 1
+                    }
+                } else {
+                    if (expandImportPath(allItems, allErrors, collected, importPath)) {
                         changed = true
                     }
                 }
@@ -527,7 +675,42 @@ expandProgramImports(prog: Program): Program {
     return Program(items: allItems, parse_errors: allErrors)
 }
 
-class Scope(parent: Scope?, names: List, types: List, immutable_names: List) {
+class Scope(parent: Scope?, names: List, types: List, immutable_names: List,
+    narrow_names: List, narrow_base_types: List) {
+
+    narrowNonNull(name: String): Void {
+        var cur = this.lookup(name)
+        if (cur != null && cur!.kind == NXTYPE_NULLABLE && cur!.elem != null) {
+            this.names.push(name)
+            this.types.push(cur!.elem!)
+            this.narrow_names.push(name)
+            this.narrow_base_types.push(cur!)
+        }
+    }
+
+    findNarrowBase(name: String): NxType? {
+        var i = this.narrow_names.len() - 1
+        while (i >= 0) {
+            var n: String = this.narrow_names.get(i)
+            if (n == name) {
+                var t: NxType = this.narrow_base_types.get(i)
+                return t
+            }
+            i = i - 1
+        }
+        if (this.parent != null) {
+            return this.parent!.findNarrowBase(name)
+        }
+        return null
+    }
+
+    invalidateNarrow(name: String): Void {
+        var base = this.findNarrowBase(name)
+        if (base != null) {
+            this.names.push(name)
+            this.types.push(base!)
+        }
+    }
 
     define(name: String, ty: NxType, isFinal: Bool): Void {
         this.names.push(name)
@@ -578,7 +761,53 @@ class Scope(parent: Scope?, names: List, types: List, immutable_names: List) {
 }
 
 makeScope(parent: Scope?): Scope {
-    return Scope(parent: parent, names: List(), types: List(), immutable_names: List())
+    return Scope(parent: parent, names: List(), types: List(), immutable_names: List(),
+        narrow_names: List(), narrow_base_types: List())
+}
+
+singleVarName(expr: Expr): String {
+    if (expr.kind == EXPR_PATH && expr.path_parts.len() == 1) {
+        var name: String = expr.path_parts.get(0)
+        return name
+    }
+    return ""
+}
+
+nullComparedVar(cond: Expr, op: Int): String {
+    if (cond.kind != EXPR_BINARY || cond.op != op) {
+        return ""
+    }
+    if (cond.right!.kind == EXPR_NULL) {
+        return singleVarName(cond.left!)
+    }
+    if (cond.left!.kind == EXPR_NULL) {
+        return singleVarName(cond.right!)
+    }
+    return ""
+}
+
+applyNonNullNarrows(cond: Expr, scope: Scope): Void {
+    if (cond.kind == EXPR_BINARY && cond.op == OP_AND) {
+        applyNonNullNarrows(cond.left!, scope)
+        applyNonNullNarrows(cond.right!, scope)
+        return
+    }
+    var name = nullComparedVar(cond, OP_NE)
+    if (name != "") {
+        scope.narrowNonNull(name)
+    }
+}
+
+applyElseNarrows(cond: Expr, scope: Scope): Void {
+    if (cond.kind == EXPR_BINARY && cond.op == OP_OR) {
+        applyElseNarrows(cond.left!, scope)
+        applyElseNarrows(cond.right!, scope)
+        return
+    }
+    var name = nullComparedVar(cond, OP_EQ)
+    if (name != "") {
+        scope.narrowNonNull(name)
+    }
 }
 
 lastPathSegment(path: String): String {
@@ -609,10 +838,35 @@ buildFnInfo(ctx: SemaCtx, fn: Function): FnInfo {
     return FnInfo(name: fn.name, param_types: ptypes, return_type: ret)
 }
 
+collectWildcardImport(ctx: SemaCtx, basePath: String): Void {
+    var children: List = wildcardChildModules(basePath)
+    var i = 0
+    while (i < children.len()) {
+        var child: String = children.get(i)
+        var childPath = basePath + "." + child
+        var existing = ctx.importPathFor(child)
+        if (existing != "" && existing != childPath) {
+            ctx.addError("conflicto de import wildcard: " + child + " ya importado desde " + existing, 0, 0)
+        } else {
+            ctx.addImport(child, childPath)
+            collectImportModule(ctx, childPath)
+        }
+        i = i + 1
+    }
+}
+
 collectItem(ctx: SemaCtx, item: Item): Void {
     if (item.kind == ITEM_IMPORT) {
         var path = item.import_path
-        ctx.addImport(lastPathSegment(path))
+        if (item.import_wildcard) {
+            collectWildcardImport(ctx, path)
+            return
+        }
+        var modName = item.import_alias
+        if (modName == "") {
+            modName = lastPathSegment(path)
+        }
+        ctx.addImport(modName, path)
         collectImportModule(ctx, path)
         return
     }
@@ -666,6 +920,11 @@ collectItem(ctx: SemaCtx, item: Item): Void {
         ctx.addFn(fi2)
         return
     }
+    if (item.kind == ITEM_EXTENSION) {
+        var extFn: Function = item.function_decl!
+        ctx.addExtension(extFn.receiver_type, buildFnInfo(ctx, extFn))
+        return
+    }
     if (item.kind == ITEM_GLOBAL) {
         var gc: GlobalConst = item.global_const!
         var ty4 = ctx.resolveType(gc.ty)
@@ -689,6 +948,23 @@ checkItem(ctx: SemaCtx, item: Item): Void {
         var returns = checkFnBody(ctx, fn, scope, ret)
         if (ret.kind != NXTYPE_VOID && ret.kind != NXTYPE_UNKNOWN && !returns) {
             ctx.addError("funcion " + fn.name + " no siempre retorna", fn.line, fn.col)
+        }
+        return
+    }
+    if (item.kind == ITEM_EXTENSION) {
+        var extFn: Function = item.function_decl!
+        var extRet = ctx.resolveType(extFn.return_type)
+        var extScope = makeScope(null)
+        extScope.define("this", ctx.resolveType(extFn.receiver_type), false)
+        var ek = 0
+        while (ek < extFn.params.len()) {
+            var ep: Param = extFn.params.get(ek)
+            extScope.define(ep.name, ctx.resolveType(ep.ty), false)
+            ek = ek + 1
+        }
+        var extReturns = checkFnBody(ctx, extFn, extScope, extRet)
+        if (extRet.kind != NXTYPE_VOID && extRet.kind != NXTYPE_UNKNOWN && !extReturns) {
+            ctx.addError("extension " + extFn.receiver_type + "." + extFn.name + " no siempre retorna", extFn.line, extFn.col)
         }
         return
     }
@@ -777,6 +1053,7 @@ checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
     if (stmt.kind == STMT_IF) {
         var condTy = inferExpr(ctx, stmt.cond!, scope)
         var thenScope = makeScope(scope)
+        applyNonNullNarrows(stmt.cond!, thenScope)
         var thenRet = checkStmts(ctx, stmt.then_stmts, thenScope, retTy)
         var elseRet = false
         if (stmt.else_stmts.len() > 0) {
@@ -785,14 +1062,19 @@ checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
                 elseRet = checkStmt(ctx, first, scope, retTy)
             } else {
                 var elseScope = makeScope(scope)
+                applyElseNarrows(stmt.cond!, elseScope)
                 elseRet = checkStmts(ctx, stmt.else_stmts, elseScope, retTy)
             }
+        }
+        if (thenRet && stmt.else_stmts.len() == 0) {
+            applyElseNarrows(stmt.cond!, scope)
         }
         return thenRet && elseRet
     }
     if (stmt.kind == STMT_WHILE) {
         inferExpr(ctx, stmt.cond!, scope)
         var bodyScope = makeScope(scope)
+        applyNonNullNarrows(stmt.cond!, bodyScope)
         checkStmts(ctx, stmt.body_stmts, bodyScope, retTy)
         return false
     }
@@ -844,6 +1126,7 @@ checkStmt(ctx: SemaCtx, stmt: Stmt, scope: Scope, retTy: NxType): Bool {
                     if (scope.lookupFinal(lhsName)) {
                         ctx.addError("no se puede reasignar variable inmutable: " + lhsName, stmt.line, stmt.col)
                     }
+                    scope.invalidateNarrow(lhsName)
                 }
             }
             inferExpr(ctx, stmt.assign_val!, scope)
@@ -910,6 +1193,13 @@ inferExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
         return makeNxTypeSimple(NXTYPE_BOOL)
     }
     if (expr.kind == EXPR_BINARY) {
+        if (expr.op == OP_AND) {
+            inferExpr(ctx, expr.left!, scope)
+            var andScope = makeScope(scope)
+            applyNonNullNarrows(expr.left!, andScope)
+            inferExpr(ctx, expr.right!, andScope)
+            return makeNxTypeSimple(NXTYPE_BOOL)
+        }
         var lt = inferExpr(ctx, expr.left!, scope)
         var rt = inferExpr(ctx, expr.right!, scope)
         if (expr.op == OP_ADD || expr.op == OP_SUB || expr.op == OP_MUL || expr.op == OP_DIV || expr.op == OP_MOD) {
@@ -1088,6 +1378,12 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
         }
     }
     var recvTy = inferExpr(ctx, expr.receiver!, scope)
+    if (!expr.is_safe && recvTy.kind == NXTYPE_NULLABLE) {
+        var recvName = singleVarName(expr.receiver!)
+        if (recvName != "" && scope.lookup(recvName) != null) {
+            ctx.addError("posible acceso a null: " + recvName + "; comprueba != null o usa !", expr.line, expr.col)
+        }
+    }
     var effectiveRecv = unwrapNullableTy(recvTy)
     var i = 0
     while (i < expr.args.len()) {
@@ -1099,14 +1395,13 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
     }
     if (effectiveRecv.kind == NXTYPE_STRING) {
         var m = expr.method_name
-        if (m == "length" || m == "toInt") {
-            return makeNxTypeSimple(NXTYPE_INT)
+        var dt = ctx.findDispatch("String", m)
+        if (dt != null) {
+            return dt!
         }
-        if (m == "charAt") {
-            return makeNxTypeSimple(NXTYPE_CHAR)
-        }
-        if (m == "equals" || m == "startsWith" || m == "contains") {
-            return makeNxTypeSimple(NXTYPE_BOOL)
+        var ext = ctx.findExtension("String", m)
+        if (ext != null) {
+            return extensionReturnType(ext!)
         }
         return makeNxTypeSimple(NXTYPE_STRING)
     }
@@ -1139,6 +1434,15 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
         return nxTypeUnknown()
     }
     if (effectiveRecv.kind == NXTYPE_INT || effectiveRecv.kind == NXTYPE_LONG || effectiveRecv.kind == NXTYPE_BOOL || effectiveRecv.kind == NXTYPE_CHAR || effectiveRecv.kind == NXTYPE_FLOAT || effectiveRecv.kind == NXTYPE_DOUBLE) {
+        var primName = nxTypeToString(effectiveRecv)
+        var dt2 = ctx.findDispatch(primName, expr.method_name)
+        if (dt2 != null) {
+            return dt2!
+        }
+        var ext2 = ctx.findExtension(primName, expr.method_name)
+        if (ext2 != null) {
+            return extensionReturnType(ext2!)
+        }
         return makeNxTypeSimple(NXTYPE_STRING)
     }
     if (effectiveRecv.kind == NXTYPE_NAMED) {
@@ -1147,6 +1451,10 @@ inferMethodExpr(ctx: SemaCtx, expr: Expr, scope: Scope): NxType {
             if (fi!.return_type != null) {
                 return fi!.return_type!
             }
+        }
+        var ext3 = ctx.findExtension(effectiveRecv.name, expr.method_name)
+        if (ext3 != null) {
+            return extensionReturnType(ext3!)
         }
     }
     return nxTypeUnknown()

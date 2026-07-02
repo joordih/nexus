@@ -33,7 +33,7 @@ IDENT  = letter { letter | digit } ;
 Palabras reservadas:
 
 ```
-var val final class data value interface annotation
+var val final fun class data value interface annotation
 import module extends implements
 if else while for in switch case default
 return break continue try catch throw
@@ -47,13 +47,22 @@ Los nombres de tipos primitivos (`Int`, `Bool`, `String`, `Void`, etc.) son iden
 ```
 INT    = digit { digit } ;
 FLOAT  = digit { digit } "." digit { digit } ;
-STRING = '"' { string_char } '"' ;
+STRING = '"' { string_char } '"'
+       | RAW_STRING
+       | MULTILINE_STRING ;
 CHAR   = "'" ( char_char | escape ) "'" ;
+
+RAW_STRING       = "r" '"' { caracter_excepto_comilla } '"' ;
+MULTILINE_STRING = '"""' { caracter } '"""' ;
 
 string_char = caracter_excepto_comilla_y_barra | escape ;
 char_char   = caracter_excepto_comilla_simple_y_barra ;
 escape      = "\" ( '"' | "'" | "\" | "n" | "t" | "r" | "0" ) ;
 ```
+
+En un `RAW_STRING` la barra invertida no inicia escapes: `r"a\tb"` contiene la barra y la `t` literales. No puede contener `"`.
+
+Un `MULTILINE_STRING` no procesa escapes y admite saltos de linea y `"` sueltas (menos de tres consecutivas). Al valor se le aplica dedent: si el contenido empieza con salto de linea se descarta ese primer salto, se descarta la ultima linea si es solo espacios, y se recorta de cada linea la indentacion minima comun de las lineas no vacias.
 
 ### Operadores y signos de puntuación
 
@@ -78,6 +87,7 @@ program = { item } EOF ;
 
 item    = module_decl
         | import_decl
+        | extension_decl
         | global_decl
         | class_decl
         | data_decl
@@ -91,9 +101,15 @@ item    = module_decl
 
 ```
 module_decl = "module" dot_path ;
-import_decl = "import" dot_path ;
+import_decl = "import" dot_path [ import_tail ] ;
+import_tail = "as" IDENT
+            | "." "*"
+            | "." "{" import_member { "," import_member } "}" ;
+import_member = IDENT [ "as" IDENT ] ;
 dot_path    = IDENT { "." IDENT } ;
 ```
+
+`as` no es palabra reservada: solo actúa como alias tras una ruta de import. `import a.b as c` registra el módulo con el nombre `c`. `import a.{x, y as z}` equivale a `import a.x` más `import a.y as z`. `import a.b.*` importa cada fichero `.nx` hijo del directorio de `a.b` como módulo, en orden alfabético; si un wildcard aporta un nombre de módulo ya ligado a otra ruta, sema lo rechaza.
 
 ### Constantes y variables globales
 
@@ -163,6 +179,14 @@ function_body = block | "=>" expr ;
 ```
 
 No existe palabra clave `fn`. La función se identifica porque su nombre va seguido de `(`.
+
+### Funciones de extensión
+
+```
+extension_decl = "fun" IDENT "." function ;
+```
+
+`fun Tipo.metodo(params): Ret { ... }` declara un método de extensión sobre `Tipo` (primitivo, `String` o tipo con nombre). Dentro del cuerpo, `this` es el receptor. En el C emitido la extensión se llama `nx_ext_Tipo_metodo` y recibe el receptor como primer parámetro. Los métodos builtin y los métodos de clase tienen prioridad sobre las extensiones con el mismo nombre.
 
 ### Tipos
 

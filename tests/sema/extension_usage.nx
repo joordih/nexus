@@ -1,0 +1,11 @@
+import std.io
+
+fun String.gritar(): String {
+    return this + "!"
+}
+
+main(): Void {
+    var s = "eh"
+    var g: String = s.gritar()
+    io.println(g)
+}

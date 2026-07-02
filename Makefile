@@ -122,6 +122,8 @@ example-stdlib: stage2
 check-examples: stage2
 	python -c "import os; os.makedirs('examples/build', exist_ok=True)"
 	build/nxc-stage2$(EXE_EXT) compile examples/hello.nx examples/build/hello
+	build/nxc-stage2$(EXE_EXT) compile examples/example.nx examples/build/example
+	build/nxc-stage2$(EXE_EXT) compile examples/fibonacci.nx examples/build/fibonacci
 	build/nxc-stage2$(EXE_EXT) compile examples/stdlib_showcase.nx examples/build/stdlib_showcase
 
 install: stage2

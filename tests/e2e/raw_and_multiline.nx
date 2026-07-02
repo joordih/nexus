@@ -1,0 +1,11 @@
+import std.io
+
+main(): Void {
+    var raw = r"a\tb"
+    io.println(raw)
+    var block = """
+        linea1
+          linea2
+        """
+    io.println(block)
+}

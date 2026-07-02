@@ -1,0 +1,27 @@
+import std.io
+
+fun String.shout(): String {
+    return this + "!"
+}
+
+fun Int.doubled(): Int {
+    return this * 2
+}
+
+data Punto {
+    x: Int
+    y: Int
+}
+
+fun Punto.sumaCoords(): Int {
+    return this.x + this.y
+}
+
+main(): Void {
+    var saludo = "hola"
+    io.println(saludo.shout())
+    var n = 21
+    io.println(n.doubled())
+    var p = Punto(x: 3, y: 4)
+    io.println(p.sumaCoords())
+}

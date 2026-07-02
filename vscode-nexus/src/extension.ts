@@ -264,17 +264,20 @@ function activateRegexFallback(context: vscode.ExtensionContext) {
 }
 
 const METHOD_DEF  = /^[ \t]+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?::\s*([A-Za-z_][A-Za-z0-9_<>, ?]*))?\s*\{/gm;
-const TOP_FN_DEF  = /^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?::\s*([A-Za-z_][A-Za-z0-9_<>, ?]*))?\s*\{/gm;
-const CLASS_START = /\bclass\s+([A-Z][a-zA-Z0-9_]*)/g;
+const TOP_FN_DEF  = /^(?!(?:fun\s+[A-Z][a-zA-Z0-9_]*\.))([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?::\s*([A-Za-z_][A-Za-z0-9_<>, ?]*))?\s*\{/gm;
+const EXT_FN_DEF  = /^fun\s+([A-Z][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?::\s*([A-Za-z_][A-Za-z0-9_<>, ?]*))?\s*\{/gm;
+const CLASS_START = /\b(?:class|data|value)\s+([A-Z][a-zA-Z0-9_]*)/g;
 const MOD_DECL    = /^\s*module\s+(?:[a-zA-Z_][a-zA-Z0-9_.]*\.)?([a-zA-Z_][a-zA-Z0-9_]*)\s*$/m;
 
 class WorkspaceIndex {
-    private classMap  = new Map<string, vscode.CompletionItem[]>();
-    private moduleMap = new Map<string, vscode.CompletionItem[]>();
+    private classMap     = new Map<string, vscode.CompletionItem[]>();
+    private moduleMap    = new Map<string, vscode.CompletionItem[]>();
+    private extensionMap = new Map<string, vscode.CompletionItem[]>();
 
     rebuild(): void {
         this.classMap.clear();
         this.moduleMap.clear();
+        this.extensionMap.clear();
         for (const folder of vscode.workspace.workspaceFolders ?? []) {
             this.walkDir(folder.uri.fsPath);
         }
@@ -314,6 +317,21 @@ class WorkspaceIndex {
             if (overwrite || !this.moduleMap.has(moduleName)) {
                 const fns = this.extractTopLevelFunctions(text);
                 if (fns.length > 0) this.moduleMap.set(moduleName, fns);
+            }
+        }
+
+        EXT_FN_DEF.lastIndex = 0;
+        let em: RegExpExecArray | null;
+        while ((em = EXT_FN_DEF.exec(text)) !== null) {
+            const typeName = em[1];
+            const methodName = em[2];
+            if (RESERVED.has(methodName)) continue;
+            const params = em[3].trim();
+            const ret = em[4]?.trim() ?? 'Void';
+            const existing = this.extensionMap.get(typeName) ?? [];
+            if (!existing.some(item => item.label === methodName)) {
+                existing.push(makeMethod(methodName, params, ret, typeName));
+                this.extensionMap.set(typeName, existing);
             }
         }
     }
@@ -374,6 +392,10 @@ class WorkspaceIndex {
 
     hasClass(name: string): boolean { return this.classMap.has(name); }
     hasModule(name: string): boolean { return this.moduleMap.has(name); }
+
+    extensionsForType(typeName: string): vscode.CompletionItem[] {
+        return this.extensionMap.get(typeName) ?? [];
+    }
 }
 
 const wsIndex = new WorkspaceIndex();
@@ -402,6 +424,10 @@ class NexusCompletionProvider implements vscode.CompletionItemProvider {
             return memberCompletions(textBefore, document, position);
         }
 
+        if (/^\s*import\s/.test(lineText)) {
+            return importCompletions();
+        }
+
         return [
             ...keywordCompletions(),
             ...typeCompletions(),
@@ -424,14 +450,27 @@ function memberCompletions(
     if (wsIndex.hasModule(receiverName)) return wsIndex.methodsForModule(receiverName);
 
     const inferredType = inferType(receiverName, document, position);
-    if (inferredType === 'String') return stringMethods();
-    if (inferredType === 'List')   return listMethods();
-    if (inferredType === 'Map')    return mapMethods();
-    if (inferredType === 'Int' || inferredType === 'Long') return intMethods();
-    if (inferredType && wsIndex.hasClass(inferredType)) {
-        return wsIndex.methodsForClass(inferredType);
+    if (inferredType) {
+        return builtinMethodsForType(inferredType);
     }
 
+    return fallbackMembers();
+}
+
+function builtinMethodsForType(typeName: string): vscode.CompletionItem[] {
+    const builtins: vscode.CompletionItem[] = [];
+    if (typeName === 'String') builtins.push(...stringMethods());
+    else if (typeName === 'List') builtins.push(...listMethods());
+    else if (typeName === 'Map') builtins.push(...mapMethods());
+    else if (typeName === 'Int' || typeName === 'Long') builtins.push(...intMethods());
+    else if (typeName === 'Float' || typeName === 'Double') builtins.push(...floatMethods());
+    else if (typeName === 'Bool' || typeName === 'Char') builtins.push(...primitiveToStringMethods());
+
+    const extensions = wsIndex.extensionsForType(typeName);
+    const classMethods = wsIndex.hasClass(typeName) ? wsIndex.methodsForClass(typeName) : [];
+
+    const merged = [...builtins, ...extensions, ...classMethods];
+    if (merged.length > 0) return merged;
     return fallbackMembers();
 }
 
@@ -445,16 +484,22 @@ function inferType(name: string, doc: vscode.TextDocument, pos: vscode.Position)
     let m: RegExpExecArray | null;
     let lastType: string | null = null;
 
-    const declRe = new RegExp(`\\b(?:var|final)\\s+${esc}\\s*:\\s*([A-Za-z_][A-Za-z0-9_<>, ?]*)`, 'g');
-    while ((m = declRe.exec(text)) !== null) lastType = m[1].trim().split('<')[0].trim();
+    const declRe = new RegExp(`\\b(?:var|val|final)\\s+${esc}\\s*:\\s*([A-Za-z_][A-Za-z0-9_<>, ?]*)`, 'g');
+    while ((m = declRe.exec(text)) !== null) lastType = m[1].trim().split('<')[0].trim().replace(/\?$/, '');
     if (lastType) return lastType;
 
-    const ctorRe = new RegExp(`\\b(?:var|final)\\s+${esc}\\s*=\\s*([A-Z][A-Za-z0-9_]*)\\s*\\(`, 'g');
+    const ctorRe = new RegExp(`\\b(?:var|val|final)\\s+${esc}\\s*=\\s*([A-Z][A-Za-z0-9_]*)\\s*\\(`, 'g');
     while ((m = ctorRe.exec(text)) !== null) lastType = m[1].trim();
     if (lastType) return lastType;
 
+    const strLitRe = new RegExp(`\\b(?:var|val|final)\\s+${esc}\\s*=\\s*r?"`, 'g');
+    if (strLitRe.test(text)) return 'String';
+
+    const floatLitRe = new RegExp(`\\b(?:var|val|final)\\s+${esc}\\s*=\\s*[0-9]+\\.[0-9]+`, 'g');
+    if (floatLitRe.test(text)) return 'Float';
+
     const paramRe = new RegExp(`\\b${esc}\\s*:\\s*([A-Za-z_][A-Za-z0-9_<>, ?]*)`, 'g');
-    while ((m = paramRe.exec(text)) !== null) lastType = m[1].trim().split('<')[0].trim();
+    while ((m = paramRe.exec(text)) !== null) lastType = m[1].trim().split('<')[0].trim().replace(/\?$/, '');
     return lastType;
 }
 
@@ -516,6 +561,27 @@ function intMethods(): vscode.CompletionItem[] {
     ];
 }
 
+function floatMethods(): vscode.CompletionItem[] {
+    return [
+        method('toString()', 'Float/Double -> String', 'Converts the floating-point value to a string.', 'toString()'),
+    ];
+}
+
+function primitiveToStringMethods(): vscode.CompletionItem[] {
+    return [
+        method('toString()', '-> String', 'Converts the value to its string representation.', 'toString()'),
+    ];
+}
+
+function importCompletions(): vscode.CompletionItem[] {
+    return [
+        fn('import path', 'import ${1:std.io}', '(path) -> Void', 'Import a module by dot path.'),
+        fn('import alias', 'import ${1:std.network.http_client} as ${2:http}', '(path as alias) -> Void', 'Import a module under a local alias.'),
+        fn('import group', 'import ${1:std.core}.{${2:math, strings}}', '(grouped) -> Void', 'Import several modules from the same package.'),
+        fn('import wildcard', 'import ${1:std.core}.*', '(wildcard) -> Void', 'Import every module in a package directory.'),
+    ];
+}
+
 function kw(label: string, snippet: string, detail: string): vscode.CompletionItem {
     const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Keyword);
     item.insertText = new vscode.SnippetString(snippet);
@@ -531,9 +597,12 @@ function keywordCompletions(): vscode.CompletionItem[] {
         kw('for', 'for ($1 in $2) {\n\t$0\n}', 'for-in loop'),
         kw('return', 'return $0', 'return statement'),
         kw('var', 'var $1: $2 = $0', 'mutable variable'),
-        kw('final', 'final $1: $2 = $0', 'immutable variable'),
+        kw('val', 'val $1 = $0', 'immutable local binding'),
+        kw('final', 'final $1: $2 = $0', 'immutable global'),
+        kw('data', 'data $1 {\n\t$0\n}', 'data class'),
         kw('class', 'class $1 {\n$0\n}', 'class definition'),
-        kw('import', 'import $0', 'import statement'),
+        kw('fun', 'fun ${1:Type}.${2:method}(${3:params}): ${4:Return} {\n\t$0\n}', 'extension function'),
+        kw('import', 'import ${1:std.io}', 'import statement'),
         kw('try', 'try {\n\t$1\n} catch (${2:err}) {\n\t$0\n}', 'try/catch block'),
         kw('throw', 'throw', 'throw statement'),
     ];
@@ -550,6 +619,10 @@ function ty(label: string, snippet: string, doc: string): vscode.CompletionItem 
 function typeCompletions(): vscode.CompletionItem[] {
     return [
         ty('Int', 'Int', 'A 64-bit integer.'),
+        ty('Long', 'Long', 'A 64-bit integer.'),
+        ty('Float', 'Float', 'A single-precision float.'),
+        ty('Double', 'Double', 'A double-precision float.'),
+        ty('Char', 'Char', 'A Unicode code unit.'),
         ty('String', 'String', 'An immutable string.'),
         ty('Bool', 'Bool', 'A boolean value.'),
         ty('List', 'List<${1:T}>', 'A mutable ordered list.'),
@@ -593,11 +666,21 @@ function documentSymbols(document: vscode.TextDocument, currentPos: vscode.Posit
     const before = document.getText(new vscode.Range(new vscode.Position(0, 0), currentPos));
     const symbols = new Map<string, DocSymbol>();
 
-    const FN_DEF = /^[ \t]*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?::\s*([A-Za-z_][A-Za-z0-9_<>, ?]*))?\s*\{/gm;
+    const FN_DEF = /^[ \t]*(?!(?:fun\s+[A-Z][a-zA-Z0-9_]*\.))([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?::\s*([A-Za-z_][A-Za-z0-9_<>, ?]*))?\s*\{/gm;
     for (const m of text.matchAll(FN_DEF)) {
         const name = m[1];
         if (RESERVED.has(name)) continue;
         symbols.set(name, { name, kind: vscode.CompletionItemKind.Function, detail: `(${m[2].trim()}): ${m[3]?.trim() ?? 'Void'}` });
+    }
+
+    const EXT_DEF = /^fun\s+([A-Z][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?::\s*([A-Za-z_][A-Za-z0-9_<>, ?]*))?\s*\{/gm;
+    for (const m of text.matchAll(EXT_DEF)) {
+        const label = `${m[1]}.${m[2]}`;
+        symbols.set(label, {
+            name: label,
+            kind: vscode.CompletionItemKind.Method,
+            detail: `(${m[3].trim()}): ${m[4]?.trim() ?? 'Void'}`,
+        });
     }
 
     const CLASS_DEF = /\b(?:class|data|value|interface)\s+([A-Z][a-zA-Z0-9_]*)/g;
@@ -605,9 +688,12 @@ function documentSymbols(document: vscode.TextDocument, currentPos: vscode.Posit
         symbols.set(m[1], { name: m[1], kind: vscode.CompletionItemKind.Class, detail: 'class' });
     }
 
-    const VAR_DECL = /\b(?:var|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z_][a-zA-Z0-9_<>, ?]*)/g;
+    const VAR_DECL = /\b(?:var|val|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*([a-zA-Z_][a-zA-Z0-9_<>, ?]*))?/g;
     for (const m of before.matchAll(VAR_DECL)) {
-        if (!symbols.has(m[1])) symbols.set(m[1], { name: m[1], kind: vscode.CompletionItemKind.Variable, detail: m[2].trim() });
+        if (!symbols.has(m[1])) {
+            const detail = m[2]?.trim() ?? 'inferred';
+            symbols.set(m[1], { name: m[1], kind: vscode.CompletionItemKind.Variable, detail });
+        }
     }
 
     return [...symbols.values()].map(s => {
@@ -620,7 +706,7 @@ function documentSymbols(document: vscode.TextDocument, currentPos: vscode.Posit
 
 const RESERVED = new Set([
     'if','else','while','for','in','return','break','continue','try','catch','throw',
-    'var','final','class','data','value','interface','annotation',
+    'var','val','final','fun','class','data','value','interface','annotation',
     'import','module','extends','implements','this','switch','case','default',
     'true','false','null',
 ]);

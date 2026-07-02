@@ -19,6 +19,7 @@ tokenDisplay(tok: Token): String {
     }
     if (k == TK_VAR) { return "var" }
     if (k == TK_VAL) { return "val" }
+    if (k == TK_FUN) { return "fun" }
     if (k == TK_FINAL) { return "final" }
     if (k == TK_CLASS) { return "class" }
     if (k == TK_DATA) { return "data" }
@@ -426,6 +427,12 @@ dumpItem(item: Item, depth: Int): String {
         return ind + "ModuleDecl(" + item.module_path + ")\n"
     }
     if (item.kind == ITEM_IMPORT) {
+        if (item.import_wildcard) {
+            return ind + "ImportDecl(" + item.import_path + ".*)\n"
+        }
+        if (item.import_alias != "") {
+            return ind + "ImportDecl(" + item.import_path + " as " + item.import_alias + ")\n"
+        }
         return ind + "ImportDecl(" + item.import_path + ")\n"
     }
     if (item.kind == ITEM_DATA) {
@@ -483,6 +490,11 @@ dumpItem(item: Item, depth: Int): String {
     if (item.kind == ITEM_FUNCTION) {
         var fn2: Function = item.function_decl!
         return dumpFunction(fn2, depth)
+    }
+    if (item.kind == ITEM_EXTENSION) {
+        var ext: Function = item.function_decl!
+        var extOut = ind + "ExtensionDecl(" + ext.receiver_type + "." + ext.name + ")\n"
+        return extOut + dumpFunction(ext, depth + 1)
     }
     if (item.kind == ITEM_GLOBAL) {
         var g: GlobalConst = item.global_const!

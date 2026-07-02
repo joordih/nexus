@@ -1,0 +1,6 @@
+var
+Ident(s)
+=
+String("hola
+  mundo")
+EOF

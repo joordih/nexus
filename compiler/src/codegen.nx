@@ -14,6 +14,62 @@ arithResultTy(lt: NxType, rt: NxType): NxType {
     return makeNxTypeSimple(NXTYPE_INT)
 }
 
+data LoweringEntry {
+    recv_name: String
+    method_name: String
+    c_name: String
+}
+
+addLowering(entries: List, recvName: String, methodName: String, cName: String): Void {
+    entries.push(LoweringEntry(recv_name: recvName, method_name: methodName, c_name: cName))
+}
+
+buildLoweringTable(): List {
+    var entries: List = List()
+    addLowering(entries, "String", "length", "nx_string_len")
+    addLowering(entries, "String", "charAt", "nx_string_char_at")
+    addLowering(entries, "String", "toInt", "nx_string_to_int")
+    addLowering(entries, "String", "equals", "nx_string_equals")
+    addLowering(entries, "String", "concat", "nx_string_concat")
+    addLowering(entries, "String", "substring", "nx_string_substring")
+    addLowering(entries, "String", "startsWith", "nx_string_starts_with")
+    addLowering(entries, "String", "endsWith", "nx_string_ends_with")
+    addLowering(entries, "String", "contains", "nx_string_contains")
+    addLowering(entries, "Int", "toString", "nx_int_to_string")
+    addLowering(entries, "Long", "toString", "nx_int_to_string")
+    addLowering(entries, "Float", "toString", "nx_float_to_string")
+    addLowering(entries, "Double", "toString", "nx_double_to_string")
+    addLowering(entries, "Bool", "toString", "nx_bool_to_string")
+    addLowering(entries, "Char", "toString", "nx_char_to_string")
+    return entries
+}
+
+extCName(recvName: String, methodName: String): String {
+    return "nx_ext_" + recvName + "_" + methodName
+}
+
+primitiveDispatchName(kind: Int): String {
+    if (kind == NXTYPE_INT) {
+        return "Int"
+    }
+    if (kind == NXTYPE_LONG) {
+        return "Long"
+    }
+    if (kind == NXTYPE_FLOAT) {
+        return "Float"
+    }
+    if (kind == NXTYPE_DOUBLE) {
+        return "Double"
+    }
+    if (kind == NXTYPE_BOOL) {
+        return "Bool"
+    }
+    if (kind == NXTYPE_CHAR) {
+        return "Char"
+    }
+    return ""
+}
+
 class CGen(
     ctx: SemaCtx,
     out: String,
@@ -21,8 +77,34 @@ class CGen(
     tmp_counter: Int,
     current_class: String,
     var_type_names: List,
-    var_type_vals: List
+    var_type_vals: List,
+    lowering_entries: List
 ) {
+
+    lookupLowering(recvName: String, methodName: String): String {
+        var i = 0
+        while (i < this.lowering_entries.len()) {
+            var le: LoweringEntry = this.lowering_entries.get(i)
+            if (le.recv_name == recvName && le.method_name == methodName) {
+                return le.c_name
+            }
+            i = i + 1
+        }
+        return ""
+    }
+
+    joinArgsPrefixed(args: List): String {
+        var out = ""
+        var i = 0
+        while (i < args.len()) {
+            var arg: CallArg = args.get(i)
+            if (arg.expr != null) {
+                out = out + ", " + this.genExpr(arg.expr!, null)
+            }
+            i = i + 1
+        }
+        return out
+    }
 
     emitLine(s: String): Void {
         var ind = ""
@@ -159,6 +241,21 @@ class CGen(
         return retC + " " + fnName + "(" + params + ")"
     }
 
+    extSignature(fn: Function): String {
+        var retTy = this.ctx.resolveType(fn.return_type)
+        var retC = this.nxTypeToCType(retTy)
+        var recvTy = this.ctx.resolveType(fn.receiver_type)
+        var params = this.nxTypeToCType(recvTy) + " this"
+        var i = 0
+        while (i < fn.params.len()) {
+            var p: Param = fn.params.get(i)
+            var pt = this.ctx.resolveType(p.ty)
+            params = params + ", " + this.nxTypeToCType(pt) + " " + p.name
+            i = i + 1
+        }
+        return retC + " " + extCName(fn.receiver_type, fn.name) + "(" + params + ")"
+    }
+
     generate(prog: Program): String {
         this.emitLine("#include \"nexus_runtime.h\"")
         this.emitRaw("")
@@ -245,6 +342,10 @@ class CGen(
                     mi = mi + 1
                 }
             }
+            if (item2.kind == ITEM_EXTENSION) {
+                var extFn: Function = item2.function_decl!
+                fwds.push(this.extSignature(extFn) + ";")
+            }
             fwdi = fwdi + 1
         }
         var fwdj = 0
@@ -305,6 +406,24 @@ class CGen(
                 pi = pi + 1
             }
             this.genFnBody(fn)
+            this.indent = this.indent - 1
+            this.emitLine("}")
+            this.emitRaw("")
+            return
+        }
+        if (item.kind == ITEM_EXTENSION) {
+            var extFn: Function = item.function_decl!
+            this.emitLine(this.extSignature(extFn) + " {")
+            this.indent = this.indent + 1
+            this.clearVarTypes()
+            this.setVarType("this", this.ctx.resolveType(extFn.receiver_type))
+            var epi = 0
+            while (epi < extFn.params.len()) {
+                var ep: Param = extFn.params.get(epi)
+                this.setVarType(ep.name, this.ctx.resolveType(ep.ty))
+                epi = epi + 1
+            }
+            this.genFnBody(extFn)
             this.indent = this.indent - 1
             this.emitLine("}")
             this.emitRaw("")
@@ -581,6 +700,10 @@ class CGen(
             return nxTypeUnknown()
         }
         if (expr.kind == EXPR_THIS) {
+            var thisTy = this.getVarType("this")
+            if (thisTy.kind != NXTYPE_UNKNOWN) {
+                return thisTy
+            }
             if (this.current_class != "") {
                 return makeNxTypeNamed(this.current_class)
             }
@@ -765,15 +888,13 @@ class CGen(
             effectiveTy = recvTy.elem!
         }
         if (effectiveTy.kind == NXTYPE_STRING) {
-            if (expr.method_name == "length" || expr.method_name == "toInt") {
-                return makeNxTypeSimple(NXTYPE_INT)
+            var dt = this.ctx.findDispatch("String", expr.method_name)
+            if (dt != null) {
+                return dt!
             }
-            if (expr.method_name == "charAt") {
-                return makeNxTypeSimple(NXTYPE_CHAR)
-            }
-            if (expr.method_name == "equals" || expr.method_name == "startsWith" ||
-                expr.method_name == "contains" || expr.method_name == "endsWith") {
-                return makeNxTypeSimple(NXTYPE_BOOL)
+            var ext = this.ctx.findExtension("String", expr.method_name)
+            if (ext != null) {
+                return extensionReturnType(ext!)
             }
             return makeNxTypeSimple(NXTYPE_STRING)
         }
@@ -803,9 +924,19 @@ class CGen(
             }
             return nxTypeUnknown()
         }
-        if (effectiveTy.kind == NXTYPE_INT || effectiveTy.kind == NXTYPE_LONG ||
-            effectiveTy.kind == NXTYPE_BOOL || effectiveTy.kind == NXTYPE_CHAR) {
-            return makeNxTypeSimple(NXTYPE_STRING)
+        var primName = primitiveDispatchName(effectiveTy.kind)
+        if (primName != "") {
+            var dt2 = this.ctx.findDispatch(primName, expr.method_name)
+            if (dt2 != null) {
+                return dt2!
+            }
+            var ext2 = this.ctx.findExtension(primName, expr.method_name)
+            if (ext2 != null) {
+                return extensionReturnType(ext2!)
+            }
+            if (effectiveTy.kind != NXTYPE_FLOAT && effectiveTy.kind != NXTYPE_DOUBLE) {
+                return makeNxTypeSimple(NXTYPE_STRING)
+            }
         }
         if (effectiveTy.kind == NXTYPE_NAMED) {
             var fi = this.ctx.findMethod(effectiveTy.name, expr.method_name)
@@ -813,6 +944,10 @@ class CGen(
                 if (fi!.return_type != null) {
                     return fi!.return_type!
                 }
+            }
+            var ext3 = this.ctx.findExtension(effectiveTy.name, expr.method_name)
+            if (ext3 != null) {
+                return extensionReturnType(ext3!)
             }
         }
         return nxTypeUnknown()
@@ -1353,19 +1488,14 @@ class CGen(
         if (effectiveTy.kind == NXTYPE_MAP) {
             return this.genMapMethod(recv, effectiveTy, expr.method_name, expr.args)
         }
-        if (effectiveTy.kind == NXTYPE_INT || effectiveTy.kind == NXTYPE_LONG) {
-            if (expr.method_name == "toString") {
-                return "nx_int_to_string(" + recv + ")"
+        var primName = primitiveDispatchName(effectiveTy.kind)
+        if (primName != "") {
+            var cName = this.lookupLowering(primName, expr.method_name)
+            if (cName != "") {
+                return cName + "(" + recv + ")"
             }
-        }
-        if (effectiveTy.kind == NXTYPE_BOOL) {
-            if (expr.method_name == "toString") {
-                return "nx_bool_to_string(" + recv + ")"
-            }
-        }
-        if (effectiveTy.kind == NXTYPE_CHAR) {
-            if (expr.method_name == "toString") {
-                return "nx_char_to_string(" + recv + ")"
+            if (this.ctx.findExtension(primName, expr.method_name) != null) {
+                return extCName(primName, expr.method_name) + "(" + recv + this.joinArgsPrefixed(expr.args) + ")"
             }
         }
         var typeName = ""
@@ -1373,6 +1503,10 @@ class CGen(
             typeName = effectiveTy.name
         }
         if (typeName != "") {
+            if (this.ctx.findMethod(typeName, expr.method_name) == null &&
+                this.ctx.findExtension(typeName, expr.method_name) != null) {
+                return extCName(typeName, expr.method_name) + "(" + recv + this.joinArgsPrefixed(expr.args) + ")"
+            }
             var allArgs = recv
             var i = 0
             while (i < expr.args.len()) {
@@ -1397,43 +1531,15 @@ class CGen(
     }
 
     genStringMethod(recv: String, method: String, args: List): String {
-        if (method == "length") {
-            return "nx_string_len(" + recv + ")"
-        }
-        if (method == "charAt") {
-            var idx = this.getArgStr(args, 0)
-            return "nx_string_char_at(" + recv + ", " + idx + ")"
-        }
-        if (method == "toInt") {
-            return "nx_string_to_int(" + recv + ")"
-        }
-        if (method == "equals") {
-            var other = this.getArgStr(args, 0)
-            return "nx_string_equals(" + recv + ", " + other + ")"
-        }
-        if (method == "concat") {
-            var other2 = this.getArgStr(args, 0)
-            return "nx_string_concat(" + recv + ", " + other2 + ")"
-        }
-        if (method == "substring") {
-            var start = this.getArgStr(args, 0)
-            var end = this.getArgStr(args, 1)
-            return "nx_string_substring(" + recv + ", " + start + ", " + end + ")"
-        }
-        if (method == "startsWith") {
-            var prefix = this.getArgStr(args, 0)
-            return "nx_string_starts_with(" + recv + ", " + prefix + ")"
-        }
-        if (method == "endsWith") {
-            var suffix = this.getArgStr(args, 0)
-            return "nx_string_ends_with(" + recv + ", " + suffix + ")"
-        }
-        if (method == "contains") {
-            var sub = this.getArgStr(args, 0)
-            return "nx_string_contains(" + recv + ", " + sub + ")"
+        var cName = this.lookupLowering("String", method)
+        if (cName != "") {
+            return cName + "(" + recv + this.joinArgsPrefixed(args) + ")"
         }
         if (method == "toString") {
             return recv
+        }
+        if (this.ctx.findExtension("String", method) != null) {
+            return extCName("String", method) + "(" + recv + this.joinArgsPrefixed(args) + ")"
         }
         return "nx_string_" + method + "(" + recv + ")"
     }
@@ -1609,7 +1715,8 @@ makeCGen(ctx: SemaCtx): CGen {
         tmp_counter: 0,
         current_class: "",
         var_type_names: List(),
-        var_type_vals: List()
+        var_type_vals: List(),
+        lowering_entries: buildLoweringTable()
     )
 }
 

@@ -1,0 +1,3 @@
+largo(s: String?): Int {
+    return s.length()
+}

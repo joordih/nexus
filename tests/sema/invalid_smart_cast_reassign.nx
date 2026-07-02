@@ -1,0 +1,12 @@
+otra(): String? {
+    return null
+}
+
+largo(s: String?): Int {
+    if (s == null) {
+        return 0
+    }
+    var n = s.length()
+    s = otra()
+    return n + s.length()
+}

@@ -67,6 +67,7 @@ final TK_TRY: Int = 71
 final TK_CATCH: Int = 72
 final TK_THROW: Int = 73
 final TK_VAL: Int = 74
+final TK_FUN: Int = 75
 final TK_ERROR: Int = 99
 
 data Token {
@@ -96,11 +97,87 @@ isSpace(c: Char): Bool {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n'
 }
 
+countLeadingIndent(line: String): Int {
+    var i = 0
+    while (i < line.length() && (line.charAt(i) == ' ' || line.charAt(i) == '\t')) {
+        i = i + 1
+    }
+    return i
+}
+
+isBlankLine(line: String): Bool {
+    return countLeadingIndent(line) == line.length()
+}
+
+splitLines(text: String): List {
+    var lines: List = List()
+    var buf = ""
+    var i = 0
+    while (i < text.length()) {
+        var c = text.charAt(i)
+        if (c == '\n') {
+            lines.push(buf)
+            buf = ""
+        } else {
+            buf = buf + c.toString()
+        }
+        i = i + 1
+    }
+    lines.push(buf)
+    return lines
+}
+
+dedentMultiline(content: String): String {
+    var body = content
+    if (body.startsWith("\n")) {
+        body = body.substring(1, body.length())
+    }
+    var lines: List = splitLines(body)
+    var count = lines.len()
+    if (count > 1) {
+        var last: String = lines.get(count - 1)
+        if (isBlankLine(last)) {
+            count = count - 1
+        }
+    }
+    var minIndent = -1
+    var i = 0
+    while (i < count) {
+        var line: String = lines.get(i)
+        if (!isBlankLine(line)) {
+            var indent = countLeadingIndent(line)
+            if (minIndent < 0 || indent < minIndent) {
+                minIndent = indent
+            }
+        }
+        i = i + 1
+    }
+    if (minIndent < 0) {
+        minIndent = 0
+    }
+    var result = ""
+    i = 0
+    while (i < count) {
+        var line: String = lines.get(i)
+        var cut = minIndent
+        if (line.length() < cut) {
+            cut = line.length()
+        }
+        if (i > 0) {
+            result = result + "\n"
+        }
+        result = result + line.substring(cut, line.length())
+        i = i + 1
+    }
+    return result
+}
+
 buildKeywords(): Map {
     var m: Map = Map()
     m.insert("var", TK_VAR)
     m.insert("final", TK_FINAL)
     m.insert("val", TK_VAL)
+    m.insert("fun", TK_FUN)
     m.insert("class", TK_CLASS)
     m.insert("data", TK_DATA)
     m.insert("value", TK_VALUE)
@@ -234,8 +311,45 @@ class Lexer(source: String, pos: Int, line: Int, col: Int, keywords: Map) {
         return makeToken(TK_INT, buf, startLine, startCol)
     }
 
+    scanRawString(startLine: Int, startCol: Int): Token {
+        this.advance()
+        this.advance()
+        var buf = ""
+        while (this.peek() != '"' && this.peek() != '\0') {
+            var c = this.advance()
+            buf = buf + c.toString()
+        }
+        if (this.peek() == '"') {
+            this.advance()
+        }
+        return makeToken(TK_STRING, buf, startLine, startCol)
+    }
+
+    scanMultilineString(startLine: Int, startCol: Int): Token {
+        var buf = ""
+        var quotes = 0
+        while (quotes < 3 && this.peek() != '\0') {
+            var c = this.advance()
+            if (c == '"') {
+                quotes = quotes + 1
+            } else {
+                while (quotes > 0) {
+                    buf = buf + "\""
+                    quotes = quotes - 1
+                }
+                buf = buf + c.toString()
+            }
+        }
+        return makeToken(TK_STRING, dedentMultiline(buf), startLine, startCol)
+    }
+
     scanString(startLine: Int, startCol: Int): Token {
         this.advance()
+        if (this.peek() == '"' && this.peek2() == '"') {
+            this.advance()
+            this.advance()
+            return this.scanMultilineString(startLine, startCol)
+        }
         var buf = ""
         while (this.peek() != '"' && this.peek() != '\0') {
             var c = this.advance()
@@ -296,6 +410,10 @@ class Lexer(source: String, pos: Int, line: Int, col: Int, keywords: Map) {
 
         if (c == '\0') {
             return makeToken(TK_EOF, "", startLine, startCol)
+        }
+
+        if (c == 'r' && this.peek2() == '"') {
+            return this.scanRawString(startLine, startCol)
         }
 
         if (isAlpha(c)) {

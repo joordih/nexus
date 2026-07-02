@@ -1,0 +1,12 @@
+main(): Void {
+    var s = "hola"
+    var n = s.length()
+    var c = s.charAt(0)
+    var b = s.endsWith("la")
+    var i = 42
+    var si = i.toString()
+    var v = true
+    var sv = v.toString()
+    var ch = 'x'
+    var sc = ch.toString()
+}

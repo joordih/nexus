@@ -1,0 +1,5 @@
+import std.core.strings as math
+import std.core.*
+
+main(): Void {
+}

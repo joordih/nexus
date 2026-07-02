@@ -1,0 +1,13 @@
+import std.io
+
+largo(s: String?): Int {
+    if (s == null) {
+        return 0
+    }
+    return s.length()
+}
+
+main(): Void {
+    io.println(largo("hola"))
+    io.println(largo(null))
+}

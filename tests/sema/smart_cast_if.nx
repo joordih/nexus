@@ -1,0 +1,17 @@
+import std.io
+
+largo(s: String?): Int {
+    if (s != null) {
+        return s.length()
+    }
+    return 0
+}
+
+combinado(s: String?): Bool {
+    return s != null && s.length() > 0
+}
+
+main(): Void {
+    io.println(largo("hola"))
+    io.println(combinado(null).toString())
+}

@@ -15,7 +15,7 @@ makePosArg(v: Expr): CallArg {
     return CallArg(kind: CALL_POS, label: "", expr: v)
 }
 
-class Parser(tokens: List, pos: Int, errors: List) {
+class Parser(tokens: List, pos: Int, errors: List, pending_items: List) {
 
     addParseError(msg: String, line: Int, col: Int): Void {
         var err = ParseError(msg: msg, line: line, col: col)
@@ -159,6 +159,12 @@ class Parser(tokens: List, pos: Int, errors: List) {
         while (this.currentKind() != TK_EOF) {
             var item: Item = this.parseItem()
             items.push(item)
+            var p = 0
+            while (p < this.pending_items.len()) {
+                items.push(this.pending_items.get(p))
+                p = p + 1
+            }
+            this.pending_items = List()
             this.skipSemis()
         }
         return Program(items: items, parse_errors: this.errors)
@@ -188,6 +194,9 @@ class Parser(tokens: List, pos: Int, errors: List) {
         }
         if (k == TK_IMPORT) {
             return this.parseImportDecl(anns)
+        }
+        if (k == TK_FUN) {
+            return this.parseExtensionDecl(anns)
         }
         if (k == TK_CLASS) {
             return this.parseClassDecl(anns)
@@ -220,7 +229,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         this.expect(TK_MODULE)
         var path: List = this.parseDotPath()
         this.skipSemis()
-        var it = Item(kind: ITEM_MODULE, module_path: listToPath(path), import_path: "",
+        var it = Item(kind: ITEM_MODULE, module_path: listToPath(path), import_path: "", import_alias: "", import_wildcard: false,
             class_decl: null, data_decl: null, interface_decl: null,
             function_decl: null, global_const: null)
         return it
@@ -229,11 +238,54 @@ class Parser(tokens: List, pos: Int, errors: List) {
     parseImportDecl(anns: List): Item {
         this.expect(TK_IMPORT)
         var path: List = this.parseDotPath()
+        if (this.currentKind() == TK_DOT && this.kindAt(1) == TK_STAR) {
+            this.advance()
+            this.advance()
+            this.skipSemis()
+            return makeImportItem(listToPath(path), "", true)
+        }
+        if (this.currentKind() == TK_DOT && this.kindAt(1) == TK_LBRACE) {
+            this.advance()
+            this.advance()
+            return this.parseImportGroup(listToPath(path))
+        }
+        var alias = this.parseImportAlias()
         this.skipSemis()
-        var it = Item(kind: ITEM_IMPORT, module_path: "", import_path: listToPath(path),
-            class_decl: null, data_decl: null, interface_decl: null,
-            function_decl: null, global_const: null)
-        return it
+        return makeImportItem(listToPath(path), alias, false)
+    }
+
+    parseImportGroup(prefix: String): Item {
+        var first: Item? = null
+        var running = true
+        while (running) {
+            var member = this.expectPathSegment()
+            var alias = this.parseImportAlias()
+            var it = makeImportItem(prefix + "." + member, alias, false)
+            if (first == null) {
+                first = it
+            } else {
+                this.pending_items.push(it)
+            }
+            if (this.currentKind() == TK_COMMA) {
+                this.advance()
+            } else {
+                running = false
+            }
+        }
+        this.expect(TK_RBRACE)
+        this.skipSemis()
+        if (first == null) {
+            return makeErrorItem()
+        }
+        return first!
+    }
+
+    parseImportAlias(): String {
+        if (this.currentKind() == TK_IDENT && this.currentText() == "as") {
+            this.advance()
+            return this.expectIdent()
+        }
+        return ""
     }
 
     parseDotPath(): List {
@@ -271,7 +323,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         var initExpr: Expr = this.parseExpr()
         this.skipSemis()
         var gc = GlobalConst(is_final: isFinal, name: name, ty: ty, const_val: initExpr)
-        var it = Item(kind: ITEM_GLOBAL, module_path: "", import_path: "",
+        var it = Item(kind: ITEM_GLOBAL, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
             class_decl: null, data_decl: null, interface_decl: null,
             function_decl: null, global_const: gc)
         return it
@@ -312,7 +364,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         while (this.currentKind() != TK_RBRACE && this.currentKind() != TK_EOF) {
             var mAnns: List = this.parseAnnotations()
             if (this.isFunctionStart()) {
-                var fn: Function = this.parseFunction(mAnns)
+                var fn: Function = this.parseFunction(mAnns, "")
                 methods.push(fn)
             } else if (this.isNameToken(this.currentKind())) {
                 var f: FieldDecl = this.parseSingleField()
@@ -327,7 +379,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
             primary_params: primaryParams, extends_type: extendsType,
             implements_types: implementsTypes, methods: methods, fields: fields,
             line: cdLn, col: cdCl)
-        var it = Item(kind: ITEM_CLASS, module_path: "", import_path: "",
+        var it = Item(kind: ITEM_CLASS, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
             class_decl: cd, data_decl: null, interface_decl: null,
             function_decl: null, global_const: null)
         return it
@@ -342,7 +394,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         var fields: List = this.parseFieldBody()
         this.expect(TK_RBRACE)
         var dd = DataDecl(annotations: anns, name: name, fields: fields, line: ddLn, col: ddCl)
-        var it = Item(kind: ITEM_DATA, module_path: "", import_path: "",
+        var it = Item(kind: ITEM_DATA, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
             class_decl: null, data_decl: dd, interface_decl: null,
             function_decl: null, global_const: null)
         return it
@@ -357,7 +409,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         var fields: List = this.parseFieldBody()
         this.expect(TK_RBRACE)
         var dd = DataDecl(annotations: anns, name: name, fields: fields, line: ddLn, col: ddCl)
-        var it = Item(kind: ITEM_VALUE, module_path: "", import_path: "",
+        var it = Item(kind: ITEM_VALUE, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
             class_decl: null, data_decl: dd, interface_decl: null,
             function_decl: null, global_const: null)
         return it
@@ -416,7 +468,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         }
         this.expect(TK_RBRACE)
         var id = InterfaceDecl(annotations: anns, name: name, type_params: typeParams, method_sigs: sigs)
-        var it = Item(kind: ITEM_INTERFACE, module_path: "", import_path: "",
+        var it = Item(kind: ITEM_INTERFACE, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
             class_decl: null, data_decl: null, interface_decl: id,
             function_decl: null, global_const: null)
         return it
@@ -451,7 +503,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
             this.expect(TK_RBRACE)
         }
         var dd = DataDecl(annotations: anns, name: name, fields: fields, line: ddLn, col: ddCl)
-        var it = Item(kind: ITEM_ANNOTATION, module_path: "", import_path: "",
+        var it = Item(kind: ITEM_ANNOTATION, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
             class_decl: null, data_decl: dd, interface_decl: null,
             function_decl: null, global_const: null)
         return it
@@ -486,14 +538,25 @@ class Parser(tokens: List, pos: Int, errors: List) {
     }
 
     parseFunctionItem(anns: List): Item {
-        var fn: Function = this.parseFunction(anns)
-        var it = Item(kind: ITEM_FUNCTION, module_path: "", import_path: "",
+        var fn: Function = this.parseFunction(anns, "")
+        var it = Item(kind: ITEM_FUNCTION, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
             class_decl: null, data_decl: null, interface_decl: null,
             function_decl: fn, global_const: null)
         return it
     }
 
-    parseFunction(anns: List): Function {
+    parseExtensionDecl(anns: List): Item {
+        this.expect(TK_FUN)
+        var recvType = this.expectIdent()
+        this.expect(TK_DOT)
+        var fn: Function = this.parseFunction(anns, recvType)
+        var it = Item(kind: ITEM_EXTENSION, module_path: "", import_path: "", import_alias: "", import_wildcard: false,
+            class_decl: null, data_decl: null, interface_decl: null,
+            function_decl: fn, global_const: null)
+        return it
+    }
+
+    parseFunction(anns: List, receiverType: String): Function {
         var fnLn = this.spanLine()
         var fnCl = this.spanCol()
         var name = this.expectIdent()
@@ -516,7 +579,7 @@ class Parser(tokens: List, pos: Int, errors: List) {
         } else {
             stmts = this.parseBlock()
         }
-        return Function(annotations: anns, name: name, params: params,
+        return Function(annotations: anns, name: name, receiver_type: receiverType, params: params,
             return_type: retTy, is_block_body: isBlock,
             stmts: stmts, body_expr: bodyExpr, line: fnLn, col: fnCl)
     }
@@ -1318,7 +1381,12 @@ makeAnnotation(name: String, line: Int, col: Int): Param {
 }
 
 makeErrorItem(): Item {
-    return Item(kind: ITEM_IMPORT, module_path: "", import_path: "error",
+    return makeImportItem("error", "", false)
+}
+
+makeImportItem(path: String, alias: String, wildcard: Bool): Item {
+    return Item(kind: ITEM_IMPORT, module_path: "", import_path: path,
+        import_alias: alias, import_wildcard: wildcard,
         class_decl: null, data_decl: null, interface_decl: null,
         function_decl: null, global_const: null)
 }
@@ -1422,6 +1490,6 @@ makeExprList(elems: List, line: Int, col: Int): Expr {
 
 parseSource(tokens: List): Program {
     var errors = List()
-    var parser = Parser(tokens: tokens, pos: 0, errors: errors)
+    var parser = Parser(tokens: tokens, pos: 0, errors: errors, pending_items: List())
     return parser.parseProgram()
 }

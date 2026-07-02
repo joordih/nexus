@@ -1,96 +1,117 @@
 import std.io
 import std.json
-import std.core.math
-import std.core.strings
-import std.core.integer
-import std.core.string_builder
-import std.collections.array_list
-import std.collections.stack
-import std.collections.linked_hash_map
-import std.collections.tree_set
-import std.collections.optional
-import std.fs.path
-import std.fs.files
-import std.system.environment
-import std.system.runtime_info
+import std.core.{integer, math, string_builder, strings}
+import std.collections.{array_list, linked_hash_map, optional, stack, tree_set}
+import std.fs.{files, path}
+import std.system.{environment, runtime_info}
 import std.network.http_client
-import std.datetime.local_date
-import std.datetime.duration
+import std.datetime.{duration, local_date}
 import std.regex.matcher
 
-reportLine(label: String, payload: String): Void {
-    io.println(label + ": " + payload)
+final CHECK_PREFIX: String = "check"
+
+logCheck(name: String, value: String): Void {
+    io.println(CHECK_PREFIX + " " + name + ": " + value)
 }
 
-reportBool(label: String, value: Bool): Void {
+logCheckBool(name: String, value: Bool): Void {
     if (value) {
-        reportLine(label, "true")
+        logCheck(name, "true")
     } else {
-        reportLine(label, "false")
+        logCheck(name, "false")
     }
 }
 
-main(): Void {
-    val doc = json.parse("{\"name\":\"nexus\",\"version\":1}")
-    reportLine("json_roundtrip", json.stringify(doc))
+demoJson(): Void {
+    val document = json.parse("{\"name\":\"nexus\",\"version\":1}")
+    logCheck("json_roundtrip", json.stringify(document))
+}
 
-    reportLine("math_abs", integer.formatInt(math.absInt(-42)))
-    reportLine("strings_trim", strings.trimString("  stdlib  "))
-
+demoCore(): Void {
+    logCheck("math_abs", integer.formatInt(math.absInt(-42)))
+    logCheck("strings_trim", strings.trimString("  stdlib  "))
     val builder = StringBuilder(parts: List())
     builder.append("nex")
     builder.append("us")
-    reportLine("string_builder", builder.toString())
+    logCheck("string_builder", builder.toString())
+}
 
+demoCollections(): Void {
     val list = ArrayList(elems: List())
     list.add("alpha")
     list.add("beta")
-    reportLine("array_list_size", integer.formatInt(list.size()))
+    logCheck("array_list_size", integer.formatInt(list.size()))
 
     val stack = Stack(elems: List(), count: 0)
     stack.push("one")
     stack.push("two")
-    reportLine("stack_top", stack.peek())
+    logCheck("stack_top", stack.peek())
 
     val ordered = LinkedHashMap(order: List(), entries: Map())
     ordered.put("first", "one")
     ordered.put("second", "two")
-    reportLine("linked_hash_order", ordered.keyAt(0))
-    reportLine("linked_hash_get", ordered.get("second")!)
+    logCheck("linked_hash_order", ordered.keyAt(0))
+    logCheck("linked_hash_get", ordered.get("second")!)
 
     val sorted = TreeSet(sortedKeys: List(), members: Map())
     sorted.add("cherry")
     sorted.add("apple")
     sorted.add("banana")
-    reportLine("tree_set_first", sorted.keyAt(0))
+    logCheck("tree_set_first", sorted.keyAt(0))
 
     val maybe = optionalOf("ready")
-    reportLine("optional_value", maybe.orElse("missing"))
+    logCheck("optional_value", maybe.orElse("missing"))
+}
 
+demoFilesystem(): Void {
     val joined = path.joinPath("examples", "hello.nx")
-    reportLine("path_join", joined)
-    reportBool("files_exists", files.exists(joined))
+    logCheck("path_join", joined)
+    logCheckBool("files_exists", files.exists(joined))
+}
 
-    reportLine("epoch_date", local_date.localDateFromEpoch(0).toString())
-    reportLine("duration_secs", integer.formatInt(duration.durationSeconds(120).toSeconds()))
+demoDatetime(): Void {
+    logCheck("epoch_date", local_date.localDateFromEpoch(0).toString())
+    logCheck("duration_secs", integer.formatInt(duration.durationSeconds(120).toSeconds()))
+}
 
+demoRegex(): Void {
     val pattern = matcher.compilePattern("N.xus")
-    reportBool("regex_match", matcher.matchPattern(pattern, "Nexus"))
+    logCheckBool("regex_match", matcher.matchPattern(pattern, "Nexus"))
+}
 
-    reportBool("env_path_set", nx_string_len(getEnv("PATH")) > 0)
+demoEnvironment(): Void {
+    logCheckBool("env_path_set", nx_string_len(getEnv("PATH")) > 0)
+}
 
+demoNetwork(): Void {
     val request = http_client.buildHttpGetRequest("example.com", "/")
-    reportBool("http_has_host", nx_string_contains(request, "Host: example.com"))
+    logCheckBool("http_has_host", nx_string_contains(request, "Host: example.com"))
+}
 
+demoExceptionHandling(): Void {
     var caught = false
     try {
         throw
     } catch (err) {
         caught = true
     }
-    reportBool("try_catch", caught)
+    logCheckBool("try_catch", caught)
+}
 
-    reportBool("runtime_epoch_positive", runtime_info.epochSeconds() > 0)
+demoRuntime(): Void {
+    logCheckBool("runtime_epoch_positive", runtime_info.epochSeconds() > 0)
+}
 
+main(): Void {
+    demoJson()
+    demoCore()
+    demoCollections()
+    demoFilesystem()
+    demoDatetime()
+    demoRegex()
+    demoEnvironment()
+    demoNetwork()
+    demoExceptionHandling()
+    demoRuntime()
     io.println("stdlib showcase complete")
 }
