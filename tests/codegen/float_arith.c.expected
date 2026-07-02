@@ -1,0 +1,15 @@
+#include "nexus_runtime.h"
+
+void nx_fn_main();
+
+void nx_fn_main() {
+    NxInt x = (((double)3) / ((double)2));
+}
+
+int main(int argc, char** argv) {
+    nexus_init();
+    nexus_set_args(argc, argv);
+    nx_fn_main();
+    return 0;
+}
+
