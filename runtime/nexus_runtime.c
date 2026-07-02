@@ -466,18 +466,38 @@ NxList* nx_list_dir(NxString path) {
     return result;
 }
 #else
+static NxBool nx_dir_entry_is_file(NxString dir, struct dirent* entry) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+        return NX_FALSE;
+    }
+    if (entry->d_type == DT_REG) {
+        return NX_TRUE;
+    }
+    if (entry->d_type != DT_UNKNOWN) {
+        return NX_FALSE;
+    }
+    char full[NX_PATH_BUF];
+    snprintf(full, sizeof(full), "%s/%s", dir, entry->d_name);
+    struct stat st;
+    if (stat(full, &st) != 0) {
+        return NX_FALSE;
+    }
+    return S_ISREG(st.st_mode) ? NX_TRUE : NX_FALSE;
+}
+
 NxList* nx_list_dir(NxString path) {
     NxList* result = nx_list_new();
     DIR* d = opendir(path);
     if (!d) return result;
     struct dirent* entry;
     while ((entry = readdir(d)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            size_t len = strlen(entry->d_name);
-            char* copy = GC_MALLOC(len + 1);
-            memcpy(copy, entry->d_name, len + 1);
-            nx_list_push(result, (void*)copy);
+        if (!nx_dir_entry_is_file(path, entry)) {
+            continue;
         }
+        size_t len = strlen(entry->d_name);
+        char* copy = GC_MALLOC(len + 1);
+        memcpy(copy, entry->d_name, len + 1);
+        nx_list_push(result, (void*)copy);
     }
     closedir(d);
     return result;

@@ -8,6 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SOURCE_DATE_EPOCH: "0"
     steps:
       - uses: actions/checkout@v4
 

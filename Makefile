@@ -59,8 +59,7 @@ test-stage1: stage1
 	@echo "Todos los tests de stage1 pasaron."
 
 verify-bootstrap: stage2 stage3
-	python -c "import sys,os; p=lambda n:n+'.exe' if os.path.exists(n+'.exe') else n; a=open(p('build/nxc-stage2'),'rb').read(); b=open(p('build/nxc-stage3'),'rb').read(); sys.exit(0 if a==b else 1)"
-	@echo "Bootstrap verificado."
+	python scripts/verify_bootstrap.py
 
 test: bootstrap test-runtime test-lexer test-parser test-sema test-codegen test-e2e test-json test-std test-lsp
 	@echo "Todas las suites de pruebas pasaron."
