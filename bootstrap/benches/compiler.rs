@@ -16,8 +16,7 @@ fn main() {
 /// Number of generated functions used to scale the synthetic workloads.
 const SIZES: &[usize] = &[16, 64, 256];
 
-/// A small, realistic program taken from the examples directory.
-const EXAMPLE: &str = include_str!("../../examples/example.nx");
+const EXAMPLE: &str = include_str!("fixtures/stage0_example.nx");
 
 /// Build a syntactically and semantically valid Nexus program with a
 /// configurable number of top-level functions, so the pipeline can be

@@ -375,7 +375,11 @@ static void nx_copy_path_os(char* dest, size_t dest_sz, NxString src) {
 }
 
 NxString nx_run_capture(NxString cmd) {
+#ifdef _WIN32
     FILE* p = _popen(cmd, "r");
+#else
+    FILE* p = popen(cmd, "r");
+#endif
     if (!p) return "";
     char* buf = GC_MALLOC(NX_CAPTURE_ALLOC);
     size_t total = 0;
@@ -384,7 +388,11 @@ NxString nx_run_capture(NxString cmd) {
         total += n;
     }
     buf[total] = '\0';
+#ifdef _WIN32
     _pclose(p);
+#else
+    pclose(p);
+#endif
     return buf;
 }
 

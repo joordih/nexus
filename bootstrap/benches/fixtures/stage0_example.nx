@@ -1,0 +1,25 @@
+import std.io
+
+data User {
+    name: String
+    email: String?
+}
+
+class UserService {
+    describe(user: User): String {
+        if (user.email != null) {
+            return user.name + " <" + user.email! + ">"
+        }
+        return user.name + " (no email on file)"
+    }
+}
+
+main(): Void {
+    var users: List<User> = List()
+    users.add(User(name: "Ada", email: "ada@example.com"))
+    users.add(User(name: "Grace", email: null))
+    var service = UserService()
+    for user in users {
+        io.println(service.describe(user))
+    }
+}
