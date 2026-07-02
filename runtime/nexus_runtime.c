@@ -734,7 +734,7 @@ void nx_compile_c(NxString c_path, NxString output) {
 #ifdef _WIN32
     const char* repro_flag = "-Xlinker /subsystem:console -Wl,/Brepro";
 #else
-    const char* repro_flag = "";
+    const char* repro_flag = "-Wl,--build-id=none -Wl,--hash-style=gnu -frandom-seed=nexus";
 #endif
 #ifdef _WIN32
     const char* ssl_link = "-llibssl -llibcrypto -lcrypt32 -ladvapi32 -luser32 -lws2_32";
